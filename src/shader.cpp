@@ -1,4 +1,4 @@
-#include "Shader.cpp"
+#include "shader.hpp"
 
 Shader::Shader(const char* vert_sh_dir, const char* frag_sh_dir){
     // read and compile shaders
@@ -41,49 +41,68 @@ Shader::Shader(const char* vert_sh_dir, const char* frag_sh_dir){
     }
 }
 
-inline void Shader::Use(){
+Shader::~Shader(){
+    glDeleteProgram(m_ProgramID);
+}
+
+void Shader::Use(){
     glUseProgram(m_ProgramID);
 }
 
-inline int32_t Shader::GetUniformID(const std::string &uniform_name){
-    if (m_UniformCache.count(uniform_name) > 0){
-        return m_UniformCache[uniform_name];
+uint32_t Shader::GetProgramID(){
+    return m_ProgramID;
+}
+
+int32_t Shader::GetUniformID(const char* uniform_name){
+    auto it = m_UniformCache.find(uniform_name);
+    if (it != m_UniformCache.end()){
+        return it->second;
     }
     else {
-        int32_t res = glGetUniformLocation(m_ProgramID, uniform_name.c_str());
+        int32_t res = glGetUniformLocation(m_ProgramID, uniform_name);
         m_UniformCache[uniform_name] = res;
         return res;
     }
 }
 
 /* SETTING UNIFORMS */
-inline bool Shader::SetUniform4f(const std::string &uniform_name, float &x, float &y, float &z, float &w){
+bool Shader::SetUniform4f(const char* uniform_name, float x, float y, float z, float w){
     int32_t id = GetUniformID(uniform_name);
     glUniform4f(id, x, y, z, w);
     return true;
 }
-inline bool Shader::SetUniform4f(const int32_t &uniform_id, float &x, float &y, float &z, float &w){
+bool Shader::SetUniform4f(const int32_t &uniform_id, float x, float y, float z, float w){
     glUniform4f(uniform_id, x, y, z, w);
     return true;
 }
 
-inline bool Shader::SetUniform3f(const std::string &uniform_name, float &x, float &y, float &z){
+bool Shader::SetUniform3f(const char* uniform_name, float x, float y, float z){
     int32_t id = GetUniformID(uniform_name);
     glUniform3f(id, x, y, z);
     return true;
 }
-inline bool Shader::SetUniform3f(const int32_t &uniform_id, float &x, float &y, float &z){
+bool Shader::SetUniform3f(const int32_t &uniform_id, float x, float y, float z){
     glUniform3f(uniform_id, x, y, z);
     return true;
 }
 
-inline bool Shader::SetUniform1f(const std::string &uniform_name, float &x){
+bool Shader::SetUniform1f(const char* uniform_name, float x){
     int32_t id = GetUniformID(uniform_name);
     glUniform1f(id, x);
     return true;
 }
-inline bool Shader::SetUniform1f(const int32_t &uniform_id, float &x){
+bool Shader::SetUniform1f(const int32_t &uniform_id, float x){
     glUniform1f(uniform_id, x);
+    return true;
+}
+
+bool Shader::SetUniform1i(const char* uniform_name, int32_t x){
+    int32_t id = GetUniformID(uniform_name);
+    glUniform1i(id, x);
+    return true;
+}
+bool Shader::SetUniform1i(const int32_t &uniform_id, int32_t x){
+    glUniform1i(uniform_id, x);
     return true;
 }
 ///////////////////////////////////////////////////////////
@@ -111,8 +130,8 @@ uint32_t Shader::ReadCompileShader(uint32_t type, const char* &shader_dir){
         char * message = (char*)alloca(size * sizeof(char));
         glGetShaderInfoLog(id, size, &size, message);
         printf("[ERROR]::SHADER::COMPILE::");
-        printf("%s" type == GL_VERTEX_SHADER ? "VERTEX_SHADER" : "FRAGMENT_SHADER");
-        printf("\n%s\n", message);
+        printf("%s", type == GL_VERTEX_SHADER ? "VERTEX_SHADER" : "FRAGMENT_SHADER");
+        printf("\n%s", message);
 
         glDeleteShader(id);
         return 0;
@@ -121,8 +140,8 @@ uint32_t Shader::ReadCompileShader(uint32_t type, const char* &shader_dir){
     return id;
 }
 
-bool Shader::ReadFile(const char * &file_dir, char* & out_file){
-    std::ifstream file(file_dir, std::ios::in | std::ios::ate);
+bool Shader::ReadFile(const char * &file_dir, char* &buffer){
+    std::ifstream file(file_dir, std::ios::in | std::ios::binary | std::ios::ate);
 
     // check the file
     if (!file.is_open()){
@@ -130,11 +149,13 @@ bool Shader::ReadFile(const char * &file_dir, char* & out_file){
         return false;
     }
 
-    std::streampos endPos = file.tellg();
-    uint64_t size = endPos - file.seekg(0, std::ios::beg).tellg();
-    out_file = new char[size];
-    file.read(out_file, size);
-    file.close;
-
+    uint32_t size = file.tellg(); 
+    buffer = new char[size+1];
+    // change pointer to the starting of the file
+    file.seekg(0, std::ios::beg);
+    file.read(buffer, size);
+    file.close();
+    // add null terminate character
+    buffer[size] = '\0';
     return true;
 }

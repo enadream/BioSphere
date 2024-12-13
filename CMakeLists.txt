@@ -29,16 +29,13 @@ set(GLFW_DIR ${CMAKE_SOURCE_DIR}/deps/glfw-3.4)
 include_directories(${GLFW_DIR}/include)
 link_directories(${GLFW_DIR}/src)
 
-# GLEW
-# set(GLEW_DIR ${CMAKE_SOURCE_DIR}/deps/glew-2.2.0)
-# include_directories(${GLEW_DIR}/include)
-# link_directories(${GLEW_DIR}/build/lib)
-# add_compile_definitions(-DGLEW_STATIC)
-
 # GLAD
 set(GLAD_DIR ${CMAKE_SOURCE_DIR}/deps/glad-4.6)
 include_directories(${GLAD_DIR}/include)
 set(GLAD_SRC ${GLAD_DIR}/src/glad.c)
+
+# STB
+include_directories(${CMAKE_SOURCE_DIR}/deps/stb)
 
 # Libraries glfw libglew32.a
 set(LIBRARIES libglfw3.a OpenGL::GL opengl32)

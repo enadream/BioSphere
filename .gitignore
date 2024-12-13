@@ -3,3 +3,4 @@ bin/
 deps/
 .vscode/
 *.exe
+res/textures/
