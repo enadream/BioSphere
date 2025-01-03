@@ -1,19 +1,41 @@
 #ifndef TEXTURE_HPP
 #define TEXTURE_HPP
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <glad/glad.h>
+
+#define MAX_TEXTURE_PATH_SIZE 127
+
+enum TextureType : uint8_t {
+    UNDEFINED,
+    DIFFUSE,
+    SPECULAR,
+    NORMAL,
+    HEIGHT,
+    EMISSION,
+};
+
 
 class Texture {
-public:
-    Texture(const char* path);
+public: // methods
+    Texture(const char* path, TextureType type = DIFFUSE);
     ~Texture();
 
-    void BindTo(uint8_t slot_id);
-private:
-    uint32_t m_TextureID;
+
+    inline void BindTo(uint8_t slot_id){
+        glActiveTexture(GL_TEXTURE0 + slot_id);
+        glBindTexture(GL_TEXTURE_2D, m_TextureID);
+    }
+    inline uint32_t GetID() {
+        return m_TextureID;
+    }
+
+public: // variables
     int32_t m_Width, m_Height, m_NumOfChannels;
-    uint8_t* m_Buffer;
+    char m_Path[MAX_TEXTURE_PATH_SIZE];
+    TextureType m_Type;
+
+private: // variables
+    uint32_t m_TextureID;
 };
 
 

@@ -27,7 +27,7 @@ set(GLFW_DIR ${CMAKE_SOURCE_DIR}/deps/glfw-3.4)
 # option(GLFW_DOCUMENT_INTERNALS "Include internals in documentation" OFF)
 # add_subdirectory(${GLFW_DIR} glfw_bin EXCLUDE_FROM_ALL)
 include_directories(${GLFW_DIR}/include)
-link_directories(${GLFW_DIR}/src)
+link_directories(${GLFW_DIR}/lib)
 
 # GLAD
 set(GLAD_DIR ${CMAKE_SOURCE_DIR}/deps/glad-4.6)
@@ -37,14 +37,22 @@ set(GLAD_SRC ${GLAD_DIR}/src/glad.c)
 # STB
 include_directories(${CMAKE_SOURCE_DIR}/deps/stb)
 
-# Libraries glfw libglew32.a
-set(LIBRARIES libglfw3.a OpenGL::GL opengl32)
+# GLMath
+include_directories(${CMAKE_SOURCE_DIR}/deps/glm-1.0.2)
+
+# Assimp
+set(ASSIMP_DIR ${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3)
+include_directories(${ASSIMP_DIR}/build/include)
+link_directories(${ASSIMP_DIR}/build/lib)
+
+# Libraries glfw libglew32.a libcglm.dll.a
+set(LIBRARIES libglfw3.a OpenGL::GL opengl32 libassimp.dll.a)
 
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 
 # Source files
-file(GLOB_RECURSE SOURCES src/main.cpp src/shader.cpp)
+file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # Create main executable
 add_executable(BioSphereEvolution ${SOURCES} ${GLAD_SRC})

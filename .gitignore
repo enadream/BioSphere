@@ -4,3 +4,4 @@ deps/
 .vscode/
 *.exe
 res/textures/
+res/old/
