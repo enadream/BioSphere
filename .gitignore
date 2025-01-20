@@ -3,5 +3,7 @@ bin/
 deps/
 .vscode/
 *.exe
+*.dll
 res/textures/
 res/old/
+res/models/

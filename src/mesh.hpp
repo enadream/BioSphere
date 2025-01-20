@@ -1,34 +1,42 @@
 #ifndef MESH_HPP
 #define MESH_HPP
 
+#include <glm/glm.hpp>
 #include <vector>
-#include "texture.hpp"
-#include "shader.hpp"
-
 using std::vector;
 
 struct Vertex
 {
-    float Position[3];
-    float Normal[3];
-    float TexCoords[2];
+    glm::vec3 Position;
+    glm::vec3 Normal;
+    glm::vec2 TexCoords;
 };
 
+
 class Mesh {
-public:
+public: // functions
     Mesh();
     ~Mesh();
 
-    void Draw(Shader &shader);
+    // delete copy constructors
+    Mesh(const Mesh &) = delete;
+    Mesh& operator=(const Mesh &) = delete;
+    // move constructor
+    Mesh(Mesh && other) noexcept;
+
+    void Draw();
     void LoadMesh();
     void UnloadMesh();
-public:
+
+    void VertexToString();
+    void PrintVertexBuffer();
+
+public: // variables
     // mesh data
     vector<Vertex> m_Vertices;
     vector<uint32_t> m_Indices;
-    vector<Texture> m_Texures;
 
-private:
+private: // variables
     uint32_t m_VAO, m_VBO, m_EBO;
     bool m_IsLoaded;
 };

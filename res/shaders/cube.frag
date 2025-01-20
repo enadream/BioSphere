@@ -47,7 +47,7 @@ in vec3 v_Normal;
 in vec3 v_FragPos;
 in vec2 v_TexCoords;
 
-uniform Material u_material;
+uniform Material u_Material;
 
 uniform SpotLight u_SpotLight;
 uniform DirectLight u_DirLight;
@@ -75,8 +75,8 @@ void main(){
     result += CalcSpotLight(u_SpotLight, norm, viewDir);
 
     // emission lighting
-    vec3 emission = vec3(0.0);
-    //vec3(texture(u_material.EmissionColor, v_TexCoords));
+    vec3 emission = vec3(texture(u_Material.EmissionTexture, v_TexCoords));
+    //vec3(texture(u_Material.EmissionTexture, v_TexCoords));
 
     FragColor = vec4(result + emission, 1.0);
 }
@@ -87,16 +87,16 @@ vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir){
     float weight;
 
     // ambient light
-    result = light.ambient * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    result = light.ambient * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // diffuse light
     weight = max(dot(-light.direction, normal), 0.0);
-    result += weight * light.diffuse * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    result += weight * light.diffuse * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // specular light
     vec3 reflectDir = reflect(light.direction, normal);
-    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_material.Shininess);
-    result += weight * light.specular * vec3(texture(u_material.SpecularTexture, v_TexCoords));
+    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_Material.Shininess);
+    result += weight * light.specular * vec3(texture(u_Material.SpecularTexture, v_TexCoords));
 
     return result;
 }
@@ -105,18 +105,18 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir){
     float weight;
 
     // ambient light
-    vec3 ambient = light.ambient * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    vec3 ambient = light.ambient * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // diffuse light
     vec3 lightVec = light.position - v_FragPos;
     vec3 lightDir = normalize(lightVec);
     weight = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = weight * light.diffuse * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    vec3 diffuse = weight * light.diffuse * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // specular light
     vec3 reflectDir = reflect(-lightDir, normal);
-    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_material.Shininess);
-    vec3 specular = weight * light.specular * vec3(texture(u_material.SpecularTexture, v_TexCoords));
+    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_Material.Shininess);
+    vec3 specular = weight * light.specular * vec3(texture(u_Material.SpecularTexture, v_TexCoords));
 
     // attenuation
     float distance = length(lightVec);
@@ -133,18 +133,18 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir){
     float weight;
     
     // ambient light
-    vec3 ambient = light.ambient * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    vec3 ambient = light.ambient * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // diffusion light
     vec3 lightVec = light.position - v_FragPos;
     vec3 lightDir = normalize(lightVec);
     weight = max(dot(lightDir, normal), 0.0);
-    vec3 diffuse = weight * light.diffuse * vec3(texture(u_material.DiffuseTexture, v_TexCoords));
+    vec3 diffuse = weight * light.diffuse * vec3(texture(u_Material.DiffuseTexture, v_TexCoords));
 
     // specular light
     vec3 reflectDir = reflect(-lightDir, normal);
-    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_material.Shininess);
-    vec3 specular = weight * light.specular * vec3(texture(u_material.SpecularTexture, v_TexCoords));
+    weight = pow(max(dot(reflectDir, viewDir), 0.0), u_Material.Shininess);
+    vec3 specular = weight * light.specular * vec3(texture(u_Material.SpecularTexture, v_TexCoords));
 
     // attenuation
     float distance = length(lightVec);

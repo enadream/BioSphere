@@ -2,8 +2,8 @@
 
 Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) : 
     m_Position(position), m_WorldUp(up), m_Yaw(yaw), m_Pitch(pitch) {
-    
-    m_Front = glm::vec3(0.0f, 0.0f, -1.0f);
+
+    // front is calculated in update camera vector
     updateCameraVectors();
 }
 

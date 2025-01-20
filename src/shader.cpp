@@ -1,5 +1,7 @@
 #include "shader.hpp"
 
+//#define DEBUG_SHADER
+
 Shader::Shader(const char* vert_sh_dir, const char* frag_sh_dir){
     // read and compile shaders
     uint32_t vertShaderID = readCompileShader(GL_VERTEX_SHADER, vert_sh_dir);
@@ -45,110 +47,97 @@ Shader::~Shader(){
     glDeleteProgram(m_ProgramID);
 }
 
-void Shader::Use(){
-    glUseProgram(m_ProgramID);
+Shader::Shader(Shader&& other) noexcept : m_ProgramID(other.m_ProgramID),
+    m_UniformCache(std::move(other.m_UniformCache)){
+    other.m_ProgramID = 0;
 }
 
-uint32_t Shader::GetProgramID(){
-    return m_ProgramID;
-}
 
-int32_t Shader::GetUniformID(const char* uniform_name){
+int32_t Shader::GetUniformID(const string& uniform_name){
     auto it = m_UniformCache.find(uniform_name);
     if (it != m_UniformCache.end()){
         return it->second;
     }
     else {
-        int32_t res = glGetUniformLocation(m_ProgramID, uniform_name);
+        int32_t res = glGetUniformLocation(m_ProgramID, uniform_name.c_str());
+#ifdef DEBUG_SHADER
+        if (res == -1){
+            printf("[WARNING]: \"%s\" uniform couldn't found.\n", uniform_name);
+        }
+#endif
         m_UniformCache[uniform_name] = res;
         return res;
     }
 }
 
 /* SETTING UNIFORMS */
-bool Shader::SetUniformMatrix4fv(const char* uniform_name, const glm::mat4 &value){
+void Shader::SetUniformMatrix4fv(const string& uniform_name, const glm::mat4 &value){
     int32_t id = GetUniformID(uniform_name);
     glUniformMatrix4fv(id, 1, GL_FALSE, glm::value_ptr(value));
-    return true;
 }
-bool Shader::SetUniformMatrix4fv(const int32_t &uniform_id, const glm::mat4 &value){
+void Shader::SetUniformMatrix4fv(const int32_t &uniform_id, const glm::mat4 &value){
     glUniformMatrix4fv(uniform_id, 1, GL_FALSE, glm::value_ptr(value));
-    return true;
 }
 
-bool Shader::SetUniformMatrix3fv(const char* uniform_name, const glm::mat3 &value){
+void Shader::SetUniformMatrix3fv(const string& uniform_name, const glm::mat3 &value){
     int32_t id = GetUniformID(uniform_name);
     glUniformMatrix3fv(id, 1, GL_FALSE, glm::value_ptr(value));
-    return true;
 }
-bool Shader::SetUniformMatrix3fv(const int32_t &uniform_id, const glm::mat4 &value){
+void Shader::SetUniformMatrix3fv(const int32_t &uniform_id, const glm::mat4 &value){
     glUniformMatrix3fv(uniform_id, 1, GL_FALSE, glm::value_ptr(value));
-    return true;
 }
 
-bool Shader::SetUniform4f(const char* uniform_name, float x, float y, float z, float w){
+void Shader::SetUniform4f(const string& uniform_name, float x, float y, float z, float w){
     int32_t id = GetUniformID(uniform_name);
     glUniform4f(id, x, y, z, w);
-    return true;
 }
-bool Shader::SetUniform4f(const int32_t &uniform_id, float x, float y, float z, float w){
+void Shader::SetUniform4f(const int32_t &uniform_id, float x, float y, float z, float w){
     glUniform4f(uniform_id, x, y, z, w);
-    return true;
 }
 
-bool Shader::SetUniform3f(const char* uniform_name, float x, float y, float z){
+void Shader::SetUniform3f(const string& uniform_name, float x, float y, float z){
     int32_t id = GetUniformID(uniform_name);
     glUniform3f(id, x, y, z);
-    return true;
 }
-bool Shader::SetUniform3f(const int32_t &uniform_id, float x, float y, float z){
+void Shader::SetUniform3f(const int32_t &uniform_id, float x, float y, float z){
     glUniform3f(uniform_id, x, y, z);
-    return true;
 }
 
-bool Shader::SetUniform1f(const char* uniform_name, float x){
+void Shader::SetUniform1f(const string& uniform_name, float x){
     int32_t id = GetUniformID(uniform_name);
     glUniform1f(id, x);
-    return true;
 }
-bool Shader::SetUniform1f(const int32_t &uniform_id, float x){
+void Shader::SetUniform1f(const int32_t &uniform_id, float x){
     glUniform1f(uniform_id, x);
-    return true;
 }
 
-bool Shader::SetUniform1i(const char* uniform_name, int32_t x){
+void Shader::SetUniform1i(const string& uniform_name, int32_t x){
     int32_t id = GetUniformID(uniform_name);
     glUniform1i(id, x);
-    return true;
 }
-bool Shader::SetUniform1i(const int32_t &uniform_id, int32_t x){
+void Shader::SetUniform1i(const int32_t &uniform_id, int32_t x){
     glUniform1i(uniform_id, x);
-    return true;
 }
 
-bool Shader::SetUniform3fv(const char* uniform_name, float x, float y, float z){
+void Shader::SetUniform3fv(const string& uniform_name, float x, float y, float z){
     int32_t id = GetUniformID(uniform_name);
     float vec3[3] = {x, y, z};
     glUniform3fv(id, 1, vec3);
-    return true;
 }
-bool Shader::SetUniform3fv(const int32_t &uniform_id, float x, float y, float z){
+void Shader::SetUniform3fv(const int32_t &uniform_id, float x, float y, float z){
     float vec3[3] = {x, y, z};
     glUniform3fv(uniform_id, 1, vec3);
-    return true;
 }
-bool Shader::SetUniform3fv(const char* uniform_name, const glm::vec3 &value){
+void Shader::SetUniform3fv(const string& uniform_name, const glm::vec3 &value){
     int32_t id = GetUniformID(uniform_name);
     glUniform3fv(id, 1, glm::value_ptr(value));
-    return true;
 }
-bool Shader::SetUniform3fv(const int32_t &uniform_id, const glm::vec3 &value){
+void Shader::SetUniform3fv(const int32_t &uniform_id, const glm::vec3 &value){
     glUniform3fv(uniform_id, 1, glm::value_ptr(value));
-    return true;
 }
 ///////////////////////////////////////////////////////////
 
-uint32_t Shader::readCompileShader(uint32_t type, const char* &shader_dir){
+uint32_t Shader::readCompileShader(uint32_t type, const char * &shader_dir){
     // read shader file
     char *shaderCode;
     if (!readFile(shader_dir, shaderCode)){
