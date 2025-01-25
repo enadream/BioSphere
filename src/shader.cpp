@@ -12,7 +12,7 @@ Shader::Shader(const char* vert_sh_dir, const char* frag_sh_dir){
         glDeleteShader(fragShaderID);
         return;
     } 
-    else if (!fragShaderID){
+    if (!fragShaderID){
         printf("[ERROR]: Shader object couldn't initalized\n");
         glDeleteShader(vertShaderID);
         return;
@@ -27,6 +27,58 @@ Shader::Shader(const char* vert_sh_dir, const char* frag_sh_dir){
     // delete compiled shaders
     glDeleteShader(vertShaderID);
     glDeleteShader(fragShaderID);
+
+    // error handling of program
+    glValidateProgram(m_ProgramID);
+    int32_t result;
+    glGetProgramiv(m_ProgramID, GL_VALIDATE_STATUS, &result);
+    if (result == GL_FALSE){
+        int32_t size;
+        glGetProgramiv(m_ProgramID, GL_INFO_LOG_LENGTH, &size);
+        char * message = (char*)alloca(size * sizeof(char));
+        glGetProgramInfoLog(m_ProgramID, size, &size, message);
+        printf("[ERROR]: Program validation failed. %s \n", message);
+        glDeleteProgram(m_ProgramID);
+        return;
+    }
+}
+
+Shader::Shader(const char * vert_sh_dir, const char * frag_sh_dir, const char * geo_sh_dir) {
+    // read and compile shaders
+    uint32_t vertShaderID = readCompileShader(GL_VERTEX_SHADER, vert_sh_dir);
+    uint32_t fragShaderID = readCompileShader(GL_FRAGMENT_SHADER, frag_sh_dir);
+    uint32_t geomShaderID = readCompileShader(GL_GEOMETRY_SHADER, geo_sh_dir);
+
+    if (!vertShaderID){
+        printf("[ERROR]: Shader object couldn't initalized\n");
+        glDeleteShader(fragShaderID);
+        glDeleteShader(geomShaderID);
+        return;
+    } 
+    if (!fragShaderID){
+        printf("[ERROR]: Shader object couldn't initalized\n");
+        glDeleteShader(vertShaderID);
+        glDeleteShader(geomShaderID);
+        return;
+    }
+    if (!geomShaderID) {
+        printf("[ERROR]: Shader object couldn't initalized\n");
+        glDeleteShader(vertShaderID);
+        glDeleteShader(fragShaderID);
+        return;
+    }
+
+    // create program
+    m_ProgramID = glCreateProgram();
+    glAttachShader(m_ProgramID, vertShaderID);
+    glAttachShader(m_ProgramID, fragShaderID);
+    glAttachShader(m_ProgramID, geomShaderID);
+    glLinkProgram(m_ProgramID);
+
+    // delete compiled shaders
+    glDeleteShader(vertShaderID);
+    glDeleteShader(fragShaderID);
+    glDeleteShader(geomShaderID);
 
     // error handling of program
     glValidateProgram(m_ProgramID);
@@ -159,9 +211,21 @@ uint32_t Shader::readCompileShader(uint32_t type, const char * &shader_dir){
         glGetShaderiv(id, GL_INFO_LOG_LENGTH, &size);
         char * message = (char*)alloca(size * sizeof(char));
         glGetShaderInfoLog(id, size, &size, message);
-        printf("[ERROR]::SHADER::COMPILE::");
-        printf("%s", type == GL_VERTEX_SHADER ? "VERTEX_SHADER" : "FRAGMENT_SHADER");
-        printf("\n%s", message);
+        
+        string shaderName;
+        switch (type)
+        {
+        case GL_VERTEX_SHADER:
+            shaderName = "VERTEX_SHADER";
+            break;
+        case GL_FRAGMENT_SHADER:
+            shaderName = "FRAGMENT_SHADER";
+            break;
+        case GL_GEOMETRY_SHADER:
+            shaderName = "GEOMETRY_SHADER";
+            break;
+        }
+        printf("[ERROR]::SHADER::COMPILE::%s\n%s", shaderName.c_str(), message);
 
         glDeleteShader(id);
         return 0;

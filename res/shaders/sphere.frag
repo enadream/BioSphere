@@ -38,15 +38,18 @@ struct SpotLight {
     float quadratic;
 };
 
-
 out vec4 FragColor;
+
+// inputs
 in vec3 v_FragPos;
+in vec3 v_Center;
+in float v_DistCenterToCam;
+in float v_ScaledRadius;
 
 // uniforms
 uniform float u_FarDist;
-uniform float u_ScaleFactor;
+uniform float u_Radius;
 
-uniform vec3 u_Center;
 uniform vec3 u_CameraPos;
 uniform vec3 u_Color;
 
@@ -62,58 +65,32 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir);
 
 void main(){
-    float dist2Center = length(v_FragPos - u_Center);
-    float outerRadius = 0.50 * u_ScaleFactor;
-    float innerRadius = 0.50;
+    float dist2Center = length(v_FragPos - v_Center);
 
-    if (dist2Center > outerRadius) {
+    if (dist2Center > v_ScaledRadius) {
         discard;
     }
 
-    
-    vec3 centerToCam = u_CameraPos - u_Center;
     vec3 fragToCam = u_CameraPos - v_FragPos;
-    // face normal
-    //vec3 faceNormal = normalize(centerToCam);
 
-    // calculate scaler value
-    //float valX = clamp(dist2Center / innerRadius, 0.0, 1.0);
-    //float scaler = sqrt(innerRadius*innerRadius - (dist2Center*dist2Center));
-
-    
-    float bVal = length(centerToCam);
+    //float bVal = v_DistCenterToCam
     float dVal = length(fragToCam);
     float xSquare = dist2Center * dist2Center;
-    float hVal = (bVal * dist2Center)/dVal;
+    float hVal = (v_DistCenterToCam * dist2Center)/dVal;
     float hSquare = hVal * hVal;
-    float rSquare = innerRadius * innerRadius;
-    float yVal = sqrt(abs(rSquare - hSquare)) + sqrt(abs(xSquare - hSquare));
-
+    float rSquare = u_Radius * u_Radius;
+    float yVal = sqrt(rSquare - hSquare) + sqrt(abs(xSquare - hSquare));
 
     gl_FragDepth = (dVal-yVal) / u_FarDist;
 
     vec3 viewDir = normalize(fragToCam);
     vec3 fragRealPos = yVal*viewDir + v_FragPos;
-    vec3 fragNormal = normalize(fragRealPos - u_Center);
+    vec3 fragNormal = normalize(fragRealPos - v_Center);
 
-    vec3 resultColor = vec3(texture(u_Texture, fragNormal));
-    //vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir);
-    //vec3 resultColor = CalcPointLight(u_PointLight, fragNormal, viewDir);
-
-    //vec3 fragRealPos = scaler*faceNormal + v_FragPos;
-    //vec3 distVec = u_CameraPos - fragRealPos;
-    // set depth value
-    //gl_FragDepth = length(distVec)/u_FarDist;
-   
-    
-
-
-    // smooth alpha blending near the edges
-    //float alpha = 1.0 - smoothstep(innerRadius, outerRadius, dist2Center);
+    vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir);
 
     // Set the final fragment color
     FragColor = vec4(resultColor, 1.0);
-
 }
 
 vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir){

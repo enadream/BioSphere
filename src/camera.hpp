@@ -27,19 +27,18 @@ public:
 
 
     float m_Fov = 45.0f;
-public:
+public: // variables
     glm::vec3 m_Position;   // Camera position in world space
     glm::vec3 m_Front;      // Forward vector of the camera
-    glm::vec3 m_WorldUp;    // World up direction
     
-private:
+private: // variables
+    glm::vec3 m_WorldUp;    // World up direction
     glm::vec3 m_Up;         // Up vector of the camera
     glm::vec3 m_Right;      // Right vector of the camera
-    
-
     float m_Yaw;
     float m_Pitch;
 
+private: // functions
     void updateCameraVectors();
 };
 

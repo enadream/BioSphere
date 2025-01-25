@@ -28,7 +28,7 @@ static int m_Width = 800, m_Height = 600;
 static double lastX, lastY;
 
 constexpr float near_distance = 0.5f;
-constexpr float far_distance = 500.0f;
+constexpr float far_distance = 600.0f;
 
 
 #include "debug_func.hpp"
@@ -156,7 +156,7 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    Camera cam(glm::vec3(0.0f, 3.0f, 0.0f));
+    Camera cam(glm::vec3(0.1f, 3.0f, 0.1f));
     m_MainCamera = &cam;
 
     // View Matrix
@@ -281,24 +281,7 @@ int main(){
     // ourModel.LoadAllMeshes();
     // ourModel.LoadTextures(shader);
 
-    Shader quadShader("res/shaders/quad.vert", "res/shaders/sphere.frag");
-    quadShader.Use();
-    quadShader.SetUniformMatrix4fv("u_Projection", projection);
     
-    // directional light
-    quadShader.SetUniform3fv("u_DirLight.direction", glm::normalize(lightDir));
-    quadShader.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
-    quadShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
-    quadShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
-
-    quadShader.SetUniform3fv("u_PointLight.position",  glm::vec3(0.0f, 5.0f, 0.0f));
-    quadShader.SetUniform3fv("u_PointLight.ambient", 0.05f * lightColor);
-    quadShader.SetUniform3fv("u_PointLight.diffuse",  0.8f * lightColor);
-    quadShader.SetUniform3fv("u_PointLight.specular", lightColor);
-    quadShader.SetUniform1f("u_PointLight.constant",  1.0f);
-    quadShader.SetUniform1f("u_PointLight.linear",    0.09f);
-    quadShader.SetUniform1f("u_PointLight.quadratic", 0.032f);
-
    
 
 
@@ -306,41 +289,45 @@ int main(){
     std::vector<glm::vec3> positions;
     
 
-    constexpr uint32_t xAmount = 10;
-    constexpr uint32_t yAmount = 10;
-    constexpr uint32_t zAmount = 20;
+    constexpr uint32_t xAmount = 1000;
+    constexpr uint32_t yAmount = 1;
+    constexpr uint32_t zAmount = 2000;
     positions.reserve(xAmount * yAmount * zAmount);
 
-    constexpr float innerRadius = 0.5f;
-    constexpr float outerRadius = 0.5f;
+    constexpr float sphereRadius = 0.5f;
     glm::vec3 spawnPos;
 
-    constexpr float circleHeight = innerRadius * glm::sqrt(3); // sqrt(3) = 1.7320508076
-    constexpr float diameter = 2*innerRadius;
+    constexpr float circleHeight = sphereRadius * glm::sqrt(3); // sqrt(3) = 1.7320508076
+    constexpr float diameter = 2*sphereRadius;
 
     constexpr float xCenterOff = diameter*xAmount/2.0f;
-    constexpr float zCenterOff = circleHeight*zAmount/2.0f;
-
+    constexpr float zCenterOff = sphereRadius*zAmount/2.0f;
 
     // overlapping exist! top level is same as height level
     for (int i = 0; i < yAmount; i++){
-        spawnPos.y = - i * innerRadius;
+        spawnPos.y = - i * sphereRadius;
         for (int j = 0; j < zAmount; j++){
-            spawnPos.z = j * innerRadius - zCenterOff;
-            float xOffset = (j + i) % 2 == 0 ? 0.0f : innerRadius;
+            spawnPos.z = j * sphereRadius - zCenterOff;
+            float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius;
             for (int k = 0; k < xAmount; k++){
                 spawnPos.x = k * diameter + xOffset - xCenterOff;
                 positions.emplace_back(spawnPos);
             }
         }
     }
+
+    //load data to the vertex buffer
+    VertexArray sphere;
+    sphere.GenVertexBuffer(positions.size() * sizeof(glm::vec3), (void*)positions.data(), positions.size(), GL_STATIC_DRAW);
+    sphere.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    //sphere.GenIndexBuffer(sizeof(s_quad_inds), (void*)s_quad_inds, IndexType::UINT8, GL_STATIC_DRAW);
     
     // // overlapping exist! top level is hexagonal
     // for (int i = 0; i < yAmount; i++){
-    //     spawnPos.y = - i * innerRadius;
+    //     spawnPos.y = - i * sphereRadius;
     //     for (int j = 0; j < zAmount; j++){
     //         spawnPos.z = j * circleHeight - zCenterOff;
-    //         float xOffset = (j + i) % 2 == 0 ? 0.0f : innerRadius;
+    //         float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius;
     //         for (int k = 0; k < xAmount; k++){
     //             spawnPos.x = k * diameter + xOffset - xCenterOff;
     //             positions.emplace_back(spawnPos);
@@ -351,7 +338,7 @@ int main(){
     // cubic model, a lot of space exist
     // for (int i = 0; i < yAmount; i++){
     //     spawnPos.y = - i * circleHeight;
-    //     float xzOffset = i % 2 == 0 ? 0.0f : innerRadius;
+    //     float xzOffset = i % 2 == 0 ? 0.0f : sphereRadius;
     //     for (int j = 0; j < zAmount; j++){
     //         spawnPos.z = j * diameter + xzOffset;
     //         for (int k = 0; k < xAmount; k++){
@@ -369,7 +356,7 @@ int main(){
 
     //     for (int j = 0; j < zAmount; j++){
     //         spawnPos.z = j * circleHeight + zOffset;
-    //         float xOffset = (j + i) % 2 == 0 ? 0.0f : innerRadius;
+    //         float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius;
     //         for (int k = 0; k < xAmount; k++){
     //             spawnPos.x = k * diameter + xOffset;
     //             positions.emplace_back(spawnPos);
@@ -377,12 +364,6 @@ int main(){
     //     }
     // }
 
-
-    // generate sphere object's data
-    VertexArray sphere;
-    sphere.GenVertexBuffer(sizeof(s_quad_verts), (void*)s_quad_verts, 4, GL_STATIC_DRAW);
-    sphere.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
-    sphere.GenIndexBuffer(sizeof(s_quad_inds), (void*)s_quad_inds, IndexType::UINT8, GL_STATIC_DRAW);
 
     // Sphere TEXTURES
     vector<string> spFaces = 
@@ -418,7 +399,29 @@ int main(){
     skyboxTex.LoadCubeMap(faces);
     Shader skyboxShader("res/shaders/skybox.vert", "res/shaders/skybox.frag");
 
+    Shader sphereShader("res/shaders/sphere.vert", "res/shaders/sphere.frag", "res/shaders/sphere.geom");
+    sphereShader.Use();
+    sphereShader.SetUniformMatrix4fv("u_Projection", projection);
+    
+    // directional light
+    sphereShader.SetUniform3fv("u_DirLight.direction", glm::normalize(lightDir));
+    sphereShader.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
+    sphereShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
+    sphereShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
 
+    sphereShader.SetUniform3fv("u_PointLight.position",  glm::vec3(0.0f, 5.0f, 0.0f));
+    sphereShader.SetUniform3fv("u_PointLight.ambient", 0.05f * lightColor);
+    sphereShader.SetUniform3fv("u_PointLight.diffuse",  0.8f * lightColor);
+    sphereShader.SetUniform3fv("u_PointLight.specular", lightColor);
+    sphereShader.SetUniform1f("u_PointLight.constant",  1.0f);
+    sphereShader.SetUniform1f("u_PointLight.linear",    0.09f);
+    sphereShader.SetUniform1f("u_PointLight.quadratic", 0.032f);
+
+    // set sphere information
+    sphereShader.SetUniform1f("u_Radius", sphereRadius);
+    sphereShader.SetUniform1f("u_FarDist", far_distance);
+
+    
     while(!glfwWindowShouldClose(window)){
         // clear buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -449,48 +452,50 @@ int main(){
         // ourModel.Draw();
         
 
-        // draw quads
-        quadShader.Use();
-        quadShader.SetUniform1f("u_FarDist", far_distance);
-        quadShader.SetUniformMatrix4fv("u_Projection", projection);
-        quadShader.SetUniformMatrix4fv("u_View", view);
-        quadShader.SetUniform3fv("u_CameraPos", cam.m_Position);
+        // set uniform data of sphere shader
+        sphereShader.Use();
+        sphereShader.SetUniformMatrix4fv("u_Projection", projection);
+        sphereShader.SetUniformMatrix4fv("u_View", view);
+
+        // set camera information
+        sphereShader.SetUniform3fv("u_CameraPos", cam.m_Position);
         
-        //quadShader.SetUniform3fv("u_DirLight.ambient", 0.3f * glm::vec3(1.0f));
-        //quadShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
-        //quadShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
+        //sphereShader.SetUniform3fv("u_DirLight.ambient", 0.3f * glm::vec3(1.0f));
+        //sphereShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
+        //sphereShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
 
-        quadShader.SetUniform3fv("u_Color", glm::vec3(0.5f, 0.8f, 1.0f));
-        quadShader.SetUniform1i("u_Texture", 0);
+        sphereShader.SetUniform3fv("u_Color", glm::vec3(0.5f, 0.8f, 1.0f));
+        sphereShader.SetUniform1i("u_Texture", 1);
         sphereTex.BindTo(1);
-        skyboxTex.BindTo(0);
-        // draw quad
 
+        // draw spheres
         sphere.Bind();
-        for (int i = 0; i < positions.size()/2; i++){
-            // world transformation
-            float scaleF;
-            glm::mat4 model = lookToCamera(positions[i], outerRadius, scaleF);
+        glDrawArrays(GL_POINTS, 0, sphere.m_VertBuffer.GetVertAmount());
 
-            quadShader.SetUniform1f("u_ScaleFactor", scaleF);
-            quadShader.SetUniform3fv("u_Center", positions[i]);
-            quadShader.SetUniformMatrix4fv("u_Model", model);
-            // render the light cubes
-            glDrawElements(GL_TRIANGLES, sphere.m_IndxBuffer.Count(), sphere.m_IndxBuffer.GetType(), 0);
-        }
+        // for (int i = 0; i < positions.size()/2; i++){
+        //     // world transformation
+        //     float scaleF;
+        //     glm::mat4 model = lookToCamera(positions[i], outerRadius, scaleF);
 
-        quadShader.SetUniform3fv("u_Color", glm::vec3(0.8f, 0.8f, 1.0f));
-        for (int i = positions.size()/2; i < positions.size(); i++){
-            // world transformation
-            float scaleF;
-            glm::mat4 model = lookToCamera(positions[i], outerRadius, scaleF);
+        //     sphereShader.SetUniform1f("u_ScaleFactor", scaleF);
+        //     sphereShader.SetUniform3fv("u_Center", positions[i]);
+        //     sphereShader.SetUniformMatrix4fv("u_Model", model);
+        //     // render the light cubes
+        //     glDrawElements(GL_TRIANGLES, sphere.m_IndxBuffer.Count(), sphere.m_IndxBuffer.GetType(), 0);
+        // }
 
-            quadShader.SetUniform1f("u_ScaleFactor", scaleF);
-            quadShader.SetUniform3fv("u_Center", positions[i]);
-            quadShader.SetUniformMatrix4fv("u_Model", model);
-            // render the light cubes
-            glDrawElements(GL_TRIANGLES, sphere.m_IndxBuffer.Count(), sphere.m_IndxBuffer.GetType(), 0);
-        }
+        // sphereShader.SetUniform3fv("u_Color", glm::vec3(0.8f, 0.8f, 1.0f));
+        // for (int i = positions.size()/2; i < positions.size(); i++){
+        //     // world transformation
+        //     float scaleF;
+        //     glm::mat4 model = lookToCamera(positions[i], outerRadius, scaleF);
+
+        //     sphereShader.SetUniform1f("u_ScaleFactor", scaleF);
+        //     sphereShader.SetUniform3fv("u_Center", positions[i]);
+        //     sphereShader.SetUniformMatrix4fv("u_Model", model);
+        //     // render the light cubes
+        //     glDrawElements(GL_TRIANGLES, sphere.m_IndxBuffer.Count(), sphere.m_IndxBuffer.GetType(), 0);
+        // }
 
         // // draw lighting objects
         // cubeMesh.m_Shaders[0].m_Shader.Use();
@@ -557,16 +562,16 @@ int main(){
         // }
 
         // draw skybox
-        // //glDepthFunc(GL_LEQUAL);
-        // skyboxShader.Use();
-        // skyboxShader.SetUniformMatrix4fv("u_Projection", projection);
-        // glm::mat4 skyView = glm::mat4(glm::mat3(view));
-        // skyboxShader.SetUniformMatrix4fv("u_View", skyView);
-        // skyboxShader.SetUniform1i("u_Skybox", 0);
-        // skyboxTex.BindTo(0);
-        // skybox.Bind();
-        // glDrawArrays(GL_TRIANGLES, 0, skybox.m_VertBuffer.GetVertAmount());
-        // //glDepthFunc(GL_LESS);
+        //glDepthFunc(GL_LEQUAL);
+        skyboxShader.Use();
+        skyboxShader.SetUniformMatrix4fv("u_Projection", projection);
+        glm::mat4 skyView = glm::mat4(glm::mat3(view));
+        skyboxShader.SetUniformMatrix4fv("u_View", skyView);
+        skyboxShader.SetUniform1i("u_Skybox", 0);
+        skyboxTex.BindTo(0);
+        skybox.Bind();
+        glDrawArrays(GL_TRIANGLES, 0, skybox.m_VertBuffer.GetVertAmount());
+        //glDepthFunc(GL_LESS);
 
         glfwSwapBuffers(window);
         // check and call events and swap the buffers
@@ -603,7 +608,7 @@ static glm::mat4 lookToCamera(const glm::vec3 &quad_pos, float radius, float &sc
     glm::vec3 direction = glm::normalize(distVector);
 
     // Compute right and up vectors for the quad
-    glm::vec3 right = glm::normalize(glm::cross(m_MainCamera->m_WorldUp, direction));
+    glm::vec3 right = glm::normalize(glm::cross(glm::vec3(0.0, 1.0, 0.0), direction)); // m_MainCamera->m_WorldUp
     glm::vec3 up = glm::cross(direction, right);
 
     // Create the rotation matrix

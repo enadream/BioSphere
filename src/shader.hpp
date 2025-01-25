@@ -15,6 +15,7 @@ using std::unordered_map, std::string;
 class Shader {
 public: // functions
     Shader(const char * vert_sh_dir, const char * frag_sh_dir);
+    Shader(const char * vert_sh_dir, const char * frag_sh_dir, const char * geo_sh_dir);
     ~Shader();
     
     // delete copy constructors
