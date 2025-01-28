@@ -60,9 +60,11 @@ uniform PointLight u_PointLight;
 uniform samplerCube u_Texture;
 
 // functions
-vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir);
+vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfragPos);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir);
+
+const float MaxHeight = 40.0f;
 
 void main(){
     float dist2Center = length(v_FragPos - v_Center);
@@ -87,18 +89,30 @@ void main(){
     vec3 fragRealPos = yVal*viewDir + v_FragPos;
     vec3 fragNormal = normalize(fragRealPos - v_Center);
 
-    vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir);
+    vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir, fragRealPos);
+    //float val = (v_FragPos.y + MaxHeight/2.0f) / MaxHeight;
 
     // Set the final fragment color
     FragColor = vec4(resultColor, 1.0);
 }
 
-vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir){
+vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfragPos){
     vec3 result;
     float weight;
 
+    float whiteVal = (realfragPos.y + MaxHeight/2.0f) / MaxHeight;
+    float greenVal = 1 - ((realfragPos.y + MaxHeight/2.0f) / MaxHeight);
+    float blueVal = whiteVal;
+
+    if (realfragPos.y < -5.0){
+        whiteVal = 0.0;
+        greenVal = 0.0;
+        blueVal = 1.0;
+    }
+
+    vec3 color = vec3(whiteVal, greenVal + whiteVal, blueVal);
     // ambient light
-    vec3 textureColor = vec3(texture(u_Texture, normal));
+    vec3 textureColor = color;//vec3(texture(u_Texture, normal));
     result = light.ambient * textureColor;
 
     // diffuse light

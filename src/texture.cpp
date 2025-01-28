@@ -93,6 +93,9 @@ CubeTexture::CubeTexture(CubeTexture&& other) noexcept : BaseTexture(std::move(o
 
 void CubeTexture::LoadCubeMap(const vector<string> &faces, TextureType type){
     if (!m_IsLoaded){
+        // update data
+        m_Type = type;
+
         glGenTextures(1, &m_TextureID);
         glBindTexture(GL_TEXTURE_CUBE_MAP, m_TextureID);
 

@@ -77,8 +77,8 @@ void Mesh::Draw(){
 
 
 void Mesh::VertexToString(){
-    for (int i = 0; i < m_Vertices.size(); i++){
-            printf("VERTEX %i : %f, %f, %f, %f, %f, %f, %f, %f\n", i,
+    for (uint32_t i = 0; i < m_Vertices.size(); i++){
+            printf("VERTEX %u : %f, %f, %f, %f, %f, %f, %f, %f\n", i,
                 m_Vertices[i].Position[0], m_Vertices[i].Position[1], m_Vertices[i].Position[2],
                 m_Vertices[i].Normal[0], m_Vertices[i].Normal[1], m_Vertices[i].Normal[2], 
                 m_Vertices[i].TexCoords[0], m_Vertices[i].TexCoords[1]);
@@ -93,7 +93,7 @@ void Mesh::PrintVertexBuffer(){
     std::vector<float> bufferData(m_Vertices.size() * VERTEX_FLOAT_AMOUNT); // Adjust size as needed
     glGetBufferSubData(GL_ARRAY_BUFFER, 0, bufferData.size() * sizeof(float), bufferData.data());
 
-    for (int i = 0; i < bufferData.size(); i++) {
+    for (uint64_t i = 0; i < bufferData.size(); i++) {
         printf("%f, ", bufferData[i]);
         if ((i+1) % VERTEX_FLOAT_AMOUNT == 0)
             printf("\n");
