@@ -100,17 +100,23 @@ vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfrag
     vec3 result;
     float weight;
 
-    float whiteVal = (realfragPos.y + MaxHeight/2.0f) / MaxHeight;
-    float greenVal = 1 - ((realfragPos.y + MaxHeight/2.0f) / MaxHeight);
-    float blueVal = whiteVal;
+    // float whiteVal = (realfragPos.y + MaxHeight/2.0f) / MaxHeight;
+    // float greenVal = 1 - ((realfragPos.y + MaxHeight/2.0f) / MaxHeight);
+    // float blueVal = whiteVal;
 
-    if (realfragPos.y < -5.0){
-        whiteVal = 0.0;
-        greenVal = 0.0;
-        blueVal = 1.0;
+    vec3 color;
+
+    if (realfragPos.y < 1.0){
+        color = vec3(0.0, 0.0, 1.0);
+    }
+    else if (realfragPos.y < 50.0){
+        float val = (realfragPos.y-1.0) / 50.0; // 1-50 range
+        color = mix(vec3(0.7411764, 0.396078, 0.0), vec3(1.0, 0.729, 0.42), val);
+    } else {
+        float val = (realfragPos.y-50.0) / 50.0; // 50-100 range
+        color = mix(vec3(1.0, 0.729, 0.42), vec3(1.0, 1.0, 1.0), val); ;
     }
 
-    vec3 color = vec3(whiteVal, greenVal + whiteVal, blueVal);
     // ambient light
     vec3 textureColor = color;//vec3(texture(u_Texture, normal));
     result = light.ambient * textureColor;

@@ -22,6 +22,7 @@
 #include "vertex_array.hpp"
 #include "math/PerlinNoise.hpp"
 #include "math/simplex.h"
+#include "noise.hpp"
 
 static glm::mat4 projection;
 static Camera * m_MainCamera;
@@ -98,7 +99,7 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    Camera cam(glm::vec3(0.5f, 40.05f, 0.5f));
+    Camera cam(glm::vec3(0.30f, 40.05f, 0.30f));
     m_MainCamera = &cam;
 
     // View Matrix
@@ -110,9 +111,9 @@ int main(){
     // create sphere objects
     std::vector<glm::vec3> positions;
     
-    constexpr uint32_t xAmount = 1000;
-    constexpr uint32_t yAmount = 2;
-    constexpr uint32_t zAmount = 2000;
+    constexpr uint32_t xAmount = 10;
+    constexpr uint32_t yAmount = 10;
+    constexpr uint32_t zAmount = 20;
     positions.reserve(xAmount * yAmount * zAmount);
 
     constexpr float sphereRadius = 0.5f;
@@ -124,19 +125,55 @@ int main(){
 
     glm::vec3 spawnPos;
     // overlapping exist! top level is same as height level
-    for (uint32_t i = 0; i < yAmount; i++){
-        spawnPos.y = - i * sphereRadius;
+    for (int64_t i = 0; i < yAmount; i++){
+        spawnPos.y = -i * sphereRadius;
         for (uint32_t j = 0; j < zAmount; j++){
             spawnPos.z = j * sphereRadius - zCenterOff;
-            float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius;
+            float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius; // (j + i)
             for (uint32_t k = 0; k < xAmount; k++){
                 spawnPos.x = k * diameter + xOffset - xCenterOff;
                 // spawnPos.y = get_block_height_perlin(spawnPos, sphereRadius, i);
-                spawnPos.y = generateHeight(spawnPos);
+                //spawnPos.y = generateHeight(spawnPos);
+                //spawnPos.y = getTerrainHeight(spawnPos.x, spawnPos.z, (i%2)*sphereRadius);
                 positions.emplace_back(spawnPos);
             }
         }
     }
+
+
+    // constexpr uint32_t terrainX = xAmount+2;
+    // constexpr uint32_t terrainZ = zAmount+2;
+    // std::vector<std::vector<float>> terrainHeight;
+    // terrainHeight.reserve(terrainZ);
+
+    // // find terrain discrete hights
+    // for (uint32_t i = 0; i < terrainZ; i++){
+    //     terrainHeight.push_back();
+    //     terrainHeight[i].reserve(terrainX);
+    //     float zValue = i*sphereRadius;
+
+    //     for (uint32_t j = 0; j < terrainX; j++){
+    //         float xValue = j*sphereRadius;
+    //         float yOffset = ((i+j) % 2) * sphereRadius;
+    //         float yValue = getTerrainHeight(xValue, zValue) + yOffset;
+    //         uint64_t discrete = yValue / sphereRadius;
+    //         yValue = discrete * sphereRadius - yOffset;
+    //         terrainHeight[i].push_back(yValue);
+    //     }
+    // }
+
+    // // create lower layer by using upper layer
+    // for (uint32_t i = 2; i < yAmount; i++){
+    //     for (uint32_t j = 0; j < zAmount; j++){
+    //         for (uint32_t k = 0; k < xAmount; k++){
+    //             uint32_t targetId = (i%2)*zAmount*xAmount + j*xAmount + k;
+    //             spawnPos.x = positions[targetId].x;
+    //             spawnPos.z = positions[targetId].z;
+    //             spawnPos.y = positions[targetId].y - sphereRadius;
+    //             positions.emplace_back(spawnPos);
+    //         }
+    //     }
+    // }
 
     // load data to the vertex buffer
     VertexArray sphere;
@@ -402,13 +439,13 @@ float generateHeight(const glm::vec3& position) {
     constexpr float baseAmplitude = 50.0f;
 
     constexpr float detailFrequency = 0.05f;
-    constexpr float detailAmplitude = 10.0f;
+    constexpr float detailAmplitude = 0.0f;
 
     // Generate base terrain (large-scale features)
-    float baseHeight = Simplex::fBm(glm::vec2(position.x, position.z) * baseFrequency, 4, 2.0f, baseAmplitude);
+    float baseHeight = Simplex::fBm(glm::vec2(position.x, position.z) * baseFrequency, 4, 2.0f, 0.5f) * baseAmplitude;
 
     // Generate details (small-scale noise)
-    float detailHeight = Simplex::fBm(glm::vec2(position.x, position.z) * detailFrequency, 3, 2.0f, detailAmplitude);
+    float detailHeight = Simplex::fBm(glm::vec2(position.x, position.z) * detailFrequency, 3, 2.0f, 0.5f) * detailAmplitude;
 
     // Combine base terrain and details
     float height = baseHeight + detailHeight;
@@ -458,10 +495,10 @@ void processInput(GLFWwindow* window){
         esc_key_pressed = false;
     }
 
-    float cameraSpeed = 2.5f; // adjust accordingly
+    float cameraSpeed = 10.0f; // adjust accordingly
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
-        cameraSpeed += 10.0f;
+        cameraSpeed += 50.0f;
     } 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
         m_MainCamera->ProcessMovement(Camera_Movement::FORWARD, cameraSpeed, deltaTime);
