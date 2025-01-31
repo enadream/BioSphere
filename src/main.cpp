@@ -42,7 +42,7 @@ void frame_buffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-float get_block_height(glm::vec3 &block_pos, float radius);
+float get_block_height(float x, float z);
 float get_block_height_perlin(glm::vec3 &block_pos, float radius, int floor);
 float generateHeight(const glm::vec3& position);
 float terrain_height(const glm::vec3& position);
@@ -52,7 +52,7 @@ int main(){
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_SAMPLES, 1); // MSAA
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
@@ -84,7 +84,8 @@ int main(){
     glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &nrAttributes);
     printf("Maximum nr of vertex attributes supported: %i \n", nrAttributes);
 
-    glEnable(GL_MULTISAMPLE);
+    glDisable(GL_MULTISAMPLE);
+    //glEnable(GL_FRAMEBUFFER_SRGB); // gamma correction
     // set viewport coordinats first 2 value are lower left corner of the window
     glViewport(0, 0, 800, 600);
     glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
@@ -99,7 +100,7 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    Camera cam(glm::vec3(0.30f, 40.05f, 0.30f));
+    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f));
     m_MainCamera = &cam;
 
     // View Matrix
@@ -111,56 +112,87 @@ int main(){
     // create sphere objects
     std::vector<glm::vec3> positions;
     
-    constexpr uint32_t xAmount = 10;
-    constexpr uint32_t yAmount = 10;
-    constexpr uint32_t zAmount = 20;
+    constexpr uint32_t xAmount = 1000;
+    constexpr uint32_t yAmount = 5;
+    constexpr uint32_t zAmount = 1000;
     positions.reserve(xAmount * yAmount * zAmount);
 
     constexpr float sphereRadius = 0.5f;
     constexpr float diameter = 2*sphereRadius;
     
     // offset values
-    constexpr float xCenterOff = diameter*xAmount/2.0f;
+    constexpr float xCenterOff = sphereRadius*xAmount/2.0f;
     constexpr float zCenterOff = sphereRadius*zAmount/2.0f;
 
-    glm::vec3 spawnPos;
-    // overlapping exist! top level is same as height level
-    for (int64_t i = 0; i < yAmount; i++){
-        spawnPos.y = -i * sphereRadius;
-        for (uint32_t j = 0; j < zAmount; j++){
-            spawnPos.z = j * sphereRadius - zCenterOff;
-            float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius; // (j + i)
-            for (uint32_t k = 0; k < xAmount; k++){
-                spawnPos.x = k * diameter + xOffset - xCenterOff;
-                // spawnPos.y = get_block_height_perlin(spawnPos, sphereRadius, i);
-                //spawnPos.y = generateHeight(spawnPos);
-                //spawnPos.y = getTerrainHeight(spawnPos.x, spawnPos.z, (i%2)*sphereRadius);
-                positions.emplace_back(spawnPos);
+    constexpr uint32_t terrainX = xAmount+2;
+    constexpr uint32_t terrainZ = zAmount+2;
+    std::vector<std::vector<float>> heightMap;
+    heightMap.reserve(terrainZ);
+
+    // find terrain discrete hight map
+    for (uint32_t i = 0; i < terrainZ; i++){
+        heightMap.emplace_back();
+        heightMap[i].reserve(terrainX);
+        float zValue = i*sphereRadius;
+
+        for (uint32_t j = 0; j < terrainX; j++){
+            float xValue = j*sphereRadius;
+            float yOffset = ((i+j) % 2) * sphereRadius;
+            float yValue = getTerrainHeight(xValue, zValue); //getTerrainHeight(xValue, zValue) - yOffset;
+            int64_t discrete = (yValue/diameter);
+            yValue = (discrete * diameter) + yOffset;
+
+            heightMap[i].push_back(yValue);
+        }
+    }
+
+    // generate terrain based on hight map
+    for (uint32_t i = 0; i < zAmount; i++){
+        float zValue = i*sphereRadius - zCenterOff;
+
+        for (uint32_t j = 0; j < xAmount; j++){
+            float xValue = j*sphereRadius - xCenterOff;
+            float yValue = heightMap[i+1][j+1]; // [z][x]
+
+            // push the value
+            positions.emplace_back(xValue, yValue, zValue);
+
+            // check 4 neighbour find the highest difference , [z][x]
+            constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
+                {-1, -1}, {-1, 1}, {1, -1}, {1, 1}}; 
+            float maxDiff = 0.0f;
+            for (int k = 0; k < 8; k++){
+                float difference = yValue - heightMap[i+1+neighbs[k][0]][j+1+neighbs[k][1]];
+                if (difference > maxDiff)
+                    maxDiff = difference;
+            }
+
+            // if difference bigger than sphereRadius create more spheres to fill the gap
+            int64_t fillAmount = (maxDiff)/(diameter);
+            for (uint32_t f = 1; f <= fillAmount; f++){
+                float fillY = yValue - f*diameter;
+                positions.emplace_back(xValue, fillY, zValue);
             }
         }
     }
 
-
-    // constexpr uint32_t terrainX = xAmount+2;
-    // constexpr uint32_t terrainZ = zAmount+2;
-    // std::vector<std::vector<float>> terrainHeight;
-    // terrainHeight.reserve(terrainZ);
-
-    // // find terrain discrete hights
-    // for (uint32_t i = 0; i < terrainZ; i++){
-    //     terrainHeight.push_back();
-    //     terrainHeight[i].reserve(terrainX);
-    //     float zValue = i*sphereRadius;
-
-    //     for (uint32_t j = 0; j < terrainX; j++){
-    //         float xValue = j*sphereRadius;
-    //         float yOffset = ((i+j) % 2) * sphereRadius;
-    //         float yValue = getTerrainHeight(xValue, zValue) + yOffset;
-    //         uint64_t discrete = yValue / sphereRadius;
-    //         yValue = discrete * sphereRadius - yOffset;
-    //         terrainHeight[i].push_back(yValue);
+    // glm::vec3 spawnPos;
+    // // overlapping exist! top level is same as height level
+    // for (int64_t i = 0; i < yAmount; i++){
+    //     spawnPos.y = -i * sphereRadius;
+    //     for (uint32_t j = 0; j < zAmount; j++){
+    //         spawnPos.z = j * sphereRadius - zCenterOff;
+    //         float xOffset = (j + i) % 2 == 0 ? 0.0f : sphereRadius; // (j + i)
+    //         for (uint32_t k = 0; k < xAmount; k++){
+    //             spawnPos.x = k * diameter + xOffset - xCenterOff;
+    //             // spawnPos.y = get_block_height_perlin(spawnPos, sphereRadius, i);
+    //             //spawnPos.y = generateHeight(spawnPos);
+    //             //spawnPos.y = getTerrainHeight(spawnPos.x, spawnPos.z, (i%2)*sphereRadius);
+    //             positions.emplace_back(spawnPos);
+    //         }
     //     }
     // }
+
 
     // // create lower layer by using upper layer
     // for (uint32_t i = 2; i < yAmount; i++){
@@ -180,6 +212,10 @@ int main(){
     sphere.GenVertexBuffer(positions.size() * sizeof(glm::vec3), (void*)positions.data(), positions.size(), GL_STATIC_DRAW);
     sphere.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
     //sphere.GenIndexBuffer(sizeof(s_quad_inds), (void*)s_quad_inds, IndexType::UINT8, GL_STATIC_DRAW);
+
+    printf("Total number of spheres: %i\n", positions.size());
+    positions.clear();
+    heightMap.clear();
 
     // Sphere TEXTURES
     vector<string> spFaces = 
@@ -329,14 +365,13 @@ float get_block_height_perlin(glm::vec3 &block_pos, float radius, int floor){
     return height;
 }
 
-float get_block_height(glm::vec3 &block_pos, float radius) {
+float get_block_height(float x, float z) {
     constexpr float frequency = 0.1f;
-    constexpr float amplitude = 5.0f;
+    constexpr float amplitude = 20.0f;
 
-    float xOffset = glm::sin(block_pos.x * frequency) * amplitude;
-    float zOffset = glm::sin(block_pos.z * frequency) * amplitude;
+    float xOffset = glm::sin(x * frequency) * amplitude;
+    float zOffset = glm::sin(z * frequency) * amplitude;
     float height = xOffset + zOffset;
-    int multiple = height / radius;
     return height;
 }
 

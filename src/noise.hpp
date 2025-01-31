@@ -29,14 +29,14 @@ float getTerrainHeight(float x, float z) {
         // Configure detail noise (surface imperfections)
         detail_noise.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
         detail_noise.SetSeed(4242);
-        detail_noise.SetFrequency(0.05f); // 0.1f
+        detail_noise.SetFrequency(0.01f); // 0.1f default
         detail_noise.SetFractalType(FastNoiseLite::FractalType_FBm);
         detail_noise.SetFractalOctaves(3);
 
         // Configure mountain noise (sharp ridges)
         mountain_noise.SetNoiseType(FastNoiseLite::NoiseType_Cellular);
         mountain_noise.SetSeed(6969);
-        mountain_noise.SetFrequency(0.001f);
+        mountain_noise.SetFrequency(0.0001f); // default 0.001f
         mountain_noise.SetCellularDistanceFunction(FastNoiseLite::CellularDistanceFunction_Hybrid);
         mountain_noise.SetCellularReturnType(FastNoiseLite::CellularReturnType_Distance2Div);
 
@@ -70,7 +70,5 @@ float getTerrainHeight(float x, float z) {
     
     // Apply water level and return   
     //return std::max(height - 50.0f, 0.0f);  // Subtract 50 to create water regions
-    //int discrete = (height + yOffset - 50.0f) / 0.5;  // Subtract 50 to create water regions
-    //return (discrete * 0.5) - yOffset;
     return height - 50.0f;
 }

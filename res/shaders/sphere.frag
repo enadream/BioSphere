@@ -45,6 +45,7 @@ in vec3 v_FragPos;
 in vec3 v_Center;
 in float v_DistCenterToCam;
 in float v_ScaledRadius;
+//in vec3 v_Color;
 
 // uniforms
 uniform float u_FarDist;
@@ -53,6 +54,7 @@ uniform float u_Radius;
 uniform vec3 u_CameraPos;
 uniform vec3 u_Color;
 
+
 uniform Material u_Material;
 uniform DirectLight u_DirLight;
 uniform PointLight u_PointLight;
@@ -60,7 +62,7 @@ uniform PointLight u_PointLight;
 uniform samplerCube u_Texture;
 
 // functions
-vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfragPos);
+vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir);
 
@@ -81,7 +83,7 @@ void main(){
     float hVal = (v_DistCenterToCam * dist2Center)/dVal;
     float hSquare = hVal * hVal;
     float rSquare = u_Radius * u_Radius;
-    float yVal = sqrt(rSquare - hSquare) + sqrt(abs(xSquare - hSquare));
+    float yVal = sqrt(abs(rSquare - hSquare)) + sqrt(abs(xSquare - hSquare));
 
     gl_FragDepth = (dVal-yVal) / u_FarDist;
 
@@ -91,29 +93,30 @@ void main(){
 
     vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir, fragRealPos);
     //float val = (v_FragPos.y + MaxHeight/2.0f) / MaxHeight;
-
+    
+    //resultColor = pow(resultColor, vec3(2.2));
     // Set the final fragment color
     FragColor = vec4(resultColor, 1.0);
 }
 
-vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfragPos){
+vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos){
     vec3 result;
     float weight;
 
-    // float whiteVal = (realfragPos.y + MaxHeight/2.0f) / MaxHeight;
-    // float greenVal = 1 - ((realfragPos.y + MaxHeight/2.0f) / MaxHeight);
+    // float whiteVal = (fragRealPos.y + MaxHeight/2.0f) / MaxHeight;
+    // float greenVal = 1 - ((fragRealPos.y + MaxHeight/2.0f) / MaxHeight);
     // float blueVal = whiteVal;
 
     vec3 color;
 
-    if (realfragPos.y < 1.0){
+    if (fragRealPos.y < 1.0){
         color = vec3(0.0, 0.0, 1.0);
     }
-    else if (realfragPos.y < 50.0){
-        float val = (realfragPos.y-1.0) / 50.0; // 1-50 range
+    else if (fragRealPos.y < 50.0){
+        float val = (fragRealPos.y-1.0) / 50.0; // 1-50 range
         color = mix(vec3(0.7411764, 0.396078, 0.0), vec3(1.0, 0.729, 0.42), val);
     } else {
-        float val = (realfragPos.y-50.0) / 50.0; // 50-100 range
+        float val = (fragRealPos.y-50.0) / 50.0; // 50-100 range
         color = mix(vec3(1.0, 0.729, 0.42), vec3(1.0, 1.0, 1.0), val); ;
     }
 
@@ -124,11 +127,15 @@ vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 realfrag
     // diffuse light
     weight = max(dot(-light.direction, normal), 0.0);
     result += weight * light.diffuse * textureColor;
+    //result += pow(weight * light.diffuse * textureColor, vec3(2.2));
 
-    // specular light
-    // vec3 reflectDir = reflect(light.direction, normal);
-    // weight = pow(max(dot(reflectDir, viewDir), 0.0), 32.0f);
-    // result += weight * light.specular * textureColor;
+    // specular light phong
+    //vec3 reflectDir = reflect(light.direction, normal);
+    //weight = pow(max(dot(reflectDir, viewDir), 0.0), 32.0f);
+    // specular light blinn phong
+    vec3 halfWayDir = normalize(-light.direction + viewDir);
+    weight = pow(max(dot(normal, halfWayDir), 0.0), 64.0f);
+    result += weight * light.specular * textureColor;
 
     return result;
 }

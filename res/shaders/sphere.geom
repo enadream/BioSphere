@@ -8,6 +8,7 @@ out vec3 v_Center;
 out vec3 v_FragPos;
 out float v_DistCenterToCam;
 out float v_ScaledRadius;
+//out vec3 v_Color;
 
 // uniforms
 uniform mat4 u_Projection;
@@ -40,11 +41,11 @@ void main(){
     vec3 up = vec3(0.0, 1.0, 0.0); // world up
     vec3 right = normalize(cross(up, viewDir)); // right vector perpendicular to viewDir
     up = normalize(cross(viewDir, right)); // recompute an accurate up vector
-
+    
     v_Center = center;
     v_DistCenterToCam = distCenterToCam;
     v_ScaledRadius = scaledRadius;
-
+    
     for (int i = 0; i < 4; i++){
         vec3 vertex = scaledRadius*offsetSc[i].x*right + scaledRadius*offsetSc[i].y*up + center;
         v_FragPos = vertex;
