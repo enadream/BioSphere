@@ -11,7 +11,7 @@ add_definitions(-DPROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror=return-type -std=c++20 -O3")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror=return-type -std=c++20 -O3 -msse4.1 -mssse3")
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -40,14 +40,14 @@ include_directories(${CMAKE_SOURCE_DIR}/deps/stb)
 # GLMath
 include_directories(${CMAKE_SOURCE_DIR}/deps/glm-1.0.2)
 
-# Assimp
-set(ASSIMP_DIR ${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3)
-include_directories(${ASSIMP_DIR}/include)
-include_directories(${ASSIMP_DIR}/build/include)
-link_directories(${ASSIMP_DIR}/build/lib)
+# # Assimp
+# set(ASSIMP_DIR ${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3)
+# include_directories(${ASSIMP_DIR}/include)
+# include_directories(${ASSIMP_DIR}/build/include)
+# link_directories(${ASSIMP_DIR}/build/lib) libassimp.dll.a
 
 # Libraries glfw libglew32.a libcglm.dll.a
-set(LIBRARIES libglfw3.a OpenGL::GL opengl32 libassimp.dll.a)
+set(LIBRARIES libglfw3.a OpenGL::GL opengl32)
 
 # Find OpenGL
 find_package(OpenGL REQUIRED)

@@ -3,12 +3,12 @@
 #include "math/FastNoiseLite.hpp"
 
 // Smoothstep function for natural transitions
-float smoothstep(float edge0, float edge1, float x) {
+static float smoothstep(float edge0, float edge1, float x) {
     x = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
     return x * x * (3.0f - 2.0f * x);
 }
 
-float getTerrainHeight(float x, float z) {
+static float getTerrainHeight(float x, float z) {
     // Initialize noise generators (static to maintain state between calls)
     static FastNoiseLite base_noise;
     static FastNoiseLite detail_noise;

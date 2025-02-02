@@ -11,8 +11,7 @@ out float v_ScaledRadius;
 //out vec3 v_Color;
 
 // uniforms
-uniform mat4 u_Projection;
-uniform mat4 u_View;
+uniform mat4 u_ViewProj;
 
 // camera informations
 uniform vec3 u_CameraPos;
@@ -49,7 +48,7 @@ void main(){
     for (int i = 0; i < 4; i++){
         vec3 vertex = scaledRadius*offsetSc[i].x*right + scaledRadius*offsetSc[i].y*up + center;
         v_FragPos = vertex;
-        gl_Position = u_Projection * u_View * vec4(vertex, 1.0);
+        gl_Position = u_ViewProj * vec4(vertex, 1.0);
         EmitVertex();
     }
     EndPrimitive();

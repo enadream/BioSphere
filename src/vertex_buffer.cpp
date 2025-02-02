@@ -24,6 +24,8 @@ void VertexBuffer::GenVertexBuffer(uint32_t size, const void*data, uint32_t vert
         glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
         glBufferData(GL_ARRAY_BUFFER, size, data, usage);
         m_VertAmount = vert_amount;
+        // unbind
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
     else {
         printf("[ERROR]: Vertex buffer couldn't generated because Vertex buffer already generated!.\n");

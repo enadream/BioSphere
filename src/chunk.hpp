@@ -1,0 +1,56 @@
+#ifndef CHUNK_HPP
+#define CHUNK_HPP
+
+#include <stdint.h>
+#include <vector>
+#include <glm/glm.hpp>
+#include <algorithm>
+
+#include "bound_box.hpp"
+#include "math/FastNoiseLite.hpp"
+
+// chunks will be square with this value 32*32
+#define CHUNK_SIZE 32
+// the deepness of indiviual quad 16*16 * 4
+#define CHUNK_QUAD_DEEPNESS 1
+
+
+
+struct Chunk {
+    std::vector<glm::vec3> m_Positions;
+    BoundBox m_BoundBox;
+    uint32_t m_StartIndex;
+};
+
+class ChunkHolder {
+public: // functions
+    ChunkHolder(uint32_t chunk_am, float sphere_radius);
+    
+public: // variables
+    std::vector<Chunk> chunks;
+    uint32_t totalNumOfSpheres;
+    uint32_t chunkAmount; //  total chunk size is chunkSize * chunkSize
+    float sphereRadius;
+
+private: // variables
+    std::vector<std::vector<float>> heightMap; // 2D random Map Coords
+
+    // noise variables
+    FastNoiseLite base_noise;
+    FastNoiseLite detail_noise;
+    FastNoiseLite mountain_noise;
+    FastNoiseLite terrain_mask;
+    bool noise_initialized = false;
+
+private: // functions
+    void generateChunks();
+    void generateChunk(const uint32_t z_off, const uint32_t x_off, uint32_t chunk_id);
+
+    void generateHeightMap();
+    void initNoise();
+    float getTerrainHeight(float x, float z);
+};
+
+
+
+#endif

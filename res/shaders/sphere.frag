@@ -1,4 +1,7 @@
 #version 460 core
+//layout (early_fragment_tests) in; // Force early testing
+//layout (depth_less) out float gl_FragDepth; // Hint for driver
+
 
 struct Material {
     sampler2D DiffuseTexture;

@@ -15,23 +15,23 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/noise.hpp>
 
+#include "texture.hpp"
 #include "camera.hpp"
 #include "temp_data.hpp"
 #include "shader.hpp"
-#include "model.hpp"
 #include "vertex_array.hpp"
 #include "math/PerlinNoise.hpp"
 #include "math/simplex.h"
 #include "noise.hpp"
+#include "bound_box.hpp"
 
 static glm::mat4 projection;
 static Camera * m_MainCamera;
 
 static float deltaTime;
-static int m_Width = 800, m_Height = 600;
 static double lastX, lastY;
 
-constexpr float near_distance = 0.5f;
+constexpr float near_distance = 1.0f;
 constexpr float far_distance = 10000.0f;
 
 
@@ -48,6 +48,9 @@ float generateHeight(const glm::vec3& position);
 float terrain_height(const glm::vec3& position);
 
 int main(){
+    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f), near_distance, far_distance, 800, 600);
+    m_MainCamera = &cam;
+
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -57,7 +60,7 @@ int main(){
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
     
-    GLFWwindow* window = glfwCreateWindow(m_Width, m_Height, "BioSphere Evolution", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(cam.m_Width, cam.m_Height, "BioSphere Evolution", NULL, NULL);
     
     if (window == NULL){
         printf("[ERROR]: Failed to create GLFW window\n");
@@ -71,7 +74,6 @@ int main(){
 
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    
     
 
     // init glad
@@ -100,13 +102,12 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f));
-    m_MainCamera = &cam;
+
 
     // View Matrix
     glm::mat4 view = cam.GetViewMatrix();
     // Projection Matrix
-    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)m_Width/m_Height, near_distance, far_distance);
+    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)cam.m_Width/cam.m_Height, near_distance, far_distance);
 
 
     // create sphere objects
@@ -207,18 +208,42 @@ int main(){
     //     }
     // }
 
-    // load data to the vertex buffer
-    VertexArray sphere;
-    sphere.GenVertexBuffer(positions.size() * sizeof(glm::vec3), (void*)positions.data(), positions.size(), GL_STATIC_DRAW);
-    sphere.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
+    // // load data to the vertex buffer
+    // VertexArray sphere;
+    // sphere.GenVertexBuffer(positions.size() * sizeof(glm::vec3), (void*)positions.data(), positions.size(), GL_STATIC_DRAW);
+    // sphere.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
     //sphere.GenIndexBuffer(sizeof(s_quad_inds), (void*)s_quad_inds, IndexType::UINT8, GL_STATIC_DRAW);
+
+   float sphereVertices[] = {
+        -1, -1,
+        1, -1,
+        -1, 1,
+        1, 1
+    };
+
+    // load instanced arrays
+    VertexBuffer sphereVBO, instanceVBO;
+    sphereVBO.GenVertexBuffer(sizeof(sphereVertices), sphereVertices, 4, GL_STATIC_DRAW);
+    instanceVBO.GenVertexBuffer(positions.size()*sizeof(glm::vec3), (void*)positions.data(), positions.size(), GL_STATIC_DRAW);
+    uint32_t sphereVAO;
+    glGenVertexArrays(1, &sphereVAO);
+    glBindVertexArray(sphereVAO);
+    sphereVBO.Bind();
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    instanceVBO.Bind();
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glVertexAttribDivisor(1, 1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
     printf("Total number of spheres: %i\n", positions.size());
     positions.clear();
     heightMap.clear();
 
     // Sphere TEXTURES
-    vector<string> spFaces = 
+    std::vector<string> spFaces = 
     {
         "res/textures/dirt_block/grass_cartoon_256.jpg",
         "res/textures/dirt_block/grass_cartoon_256.jpg",
@@ -237,7 +262,7 @@ int main(){
     skybox.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), (void*)0);
 
     // SKYBOX TEXTURES
-    vector<string> faces = 
+    std::vector<string> faces = 
     {
         "res/textures/skybox/right.jpg",
         "res/textures/skybox/left.jpg",
@@ -250,16 +275,14 @@ int main(){
     CubeTexture skyboxTex;
     skyboxTex.LoadCubeMap(faces);
 
-    // shaders
-    Shader skyboxShader("res/shaders/skybox.vert", "res/shaders/skybox.frag");
-    Shader sphereShader("res/shaders/sphere.vert", "res/shaders/sphere.frag", "res/shaders/sphere.geom");
-    sphereShader.Use();
-    sphereShader.SetUniformMatrix4fv("u_Projection", projection);
-    
     // light information
     glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f));
     glm::vec3 lightColor(1.0f);
 
+    // shaders
+    Shader skyboxShader("res/shaders/skybox.vert", "res/shaders/skybox.frag");
+    Shader sphereShader("res/shaders/sphere2.vert", "res/shaders/sphere.frag"); // , "res/shaders/sphere.geom"
+    sphereShader.Use();
     // directional light
     sphereShader.SetUniform3fv("u_DirLight.direction", glm::normalize(lightDir));
     sphereShader.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
@@ -282,6 +305,16 @@ int main(){
     float frameUpate = 0.0;
     uint32_t frameCount = 0;
 
+    VertexArray box;
+    box.GenVertexBuffer(sizeof(s_cubeVertonly), s_cubeVertonly, 36, GL_STATIC_DRAW);
+    box.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), 0);
+    Shader boxShader("res/shaders/light.vert", "res/shaders/light.frag");
+
+    BoundBox boundbox(-0.2f, 1.20f, 69.55f, 70.55f, -0.2f, 1.20f);
+    boundbox.Print();
+    cam.CalculateFrustum();
+    cam.m_Frustum.Print();
+
     while(!glfwWindowShouldClose(window)){
         // clear buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -300,7 +333,6 @@ int main(){
             frameUpate = 0.0;
             frameCount = 0;
         }
-
         frameUpate += deltaTime;
         frameCount++;
 
@@ -309,26 +341,33 @@ int main(){
 
         // update view matrix and projection matrix
         view = cam.GetViewMatrix();
+        // calculate view frustum
+        cam.CalculateFrustum();
 
+
+        
         // set uniform data of sphere shader
         sphereShader.Use();
-        sphereShader.SetUniformMatrix4fv("u_Projection", projection);
-        sphereShader.SetUniformMatrix4fv("u_View", view);
-
-        // set camera information
+        sphereShader.SetUniformMatrix4fv("u_ProjView", projection * view);
         sphereShader.SetUniform3fv("u_CameraPos", cam.m_Position);
-        
         //sphereShader.SetUniform3fv("u_DirLight.ambient", 0.3f * glm::vec3(1.0f));
         //sphereShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
         //sphereShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
-
         sphereShader.SetUniform3fv("u_Color", glm::vec3(0.5f, 0.8f, 1.0f));
         sphereShader.SetUniform1i("u_Texture", 1);
         sphereTex.BindTo(1);
-
         // draw spheres
-        sphere.Bind();
-        glDrawArrays(GL_POINTS, 0, sphere.m_VertBuffer.GetVertAmount());
+        glBindVertexArray(sphereVAO);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, instanceVBO.GetVertAmount());
+        
+        //glDrawArrays(GL_POINTS, 0, sphere.m_VertBuffer.GetVertAmount());
+        
+        
+        boxShader.Use();
+        boxShader.SetUniformMatrix4fv("u_ProjView", projection * view);
+        boxShader.SetUniformMatrix4fv("u_Model", glm::translate(glm::mat4(1.0f), glm::vec3(0.30f, 70.05f, 0.30f)));
+        box.Bind();
+        glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());
 
         // // draw skybox
         // //glDepthFunc(GL_LEQUAL);
@@ -490,10 +529,6 @@ float generateHeight(const glm::vec3& position) {
 
 
 
-
-
-
-
 // // Usage function
 // float getHeight(float x, float z) {
 //     return terrain(vec2(x, z));
@@ -557,7 +592,7 @@ void processInput(GLFWwindow* window){
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset){
     m_MainCamera->ProcessMouseScroll(yoffset);
-    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)m_Width/m_Height, near_distance, far_distance);
+    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)m_MainCamera->m_Width/m_MainCamera->m_Height, near_distance, far_distance);
 }
 
 void frame_buffer_size_callback(GLFWwindow* window, int width, int height){
@@ -566,9 +601,9 @@ void frame_buffer_size_callback(GLFWwindow* window, int width, int height){
         return;
     }
     glViewport(0, 0, width, height);
-    m_Width = width;
-    m_Height = height;
-    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)m_Width/m_Height, near_distance, far_distance);
+    m_MainCamera->m_Width = width;
+    m_MainCamera->m_Height = height;
+    projection = glm::perspective(glm::radians(m_MainCamera->m_Fov), (float)m_MainCamera->m_Width/m_MainCamera->m_Height, near_distance, far_distance);
 }
 
 // Function to convert glm::vec3 to string

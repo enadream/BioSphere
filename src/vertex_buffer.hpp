@@ -27,8 +27,7 @@ public: // functions
     inline uint32_t GetVertAmount() const {
         return m_VertAmount;
     }
-
-
+    
 private: // variables
     uint32_t m_VBO;
     uint32_t m_VertAmount;
