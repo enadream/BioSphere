@@ -28,6 +28,9 @@ public: // functions
     inline void Bind() const {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
     }
+    inline void Unbind() const {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
     inline uint32_t Count() const {
         return m_Count;
     }

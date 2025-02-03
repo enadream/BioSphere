@@ -15,7 +15,6 @@
 #define CHUNK_QUAD_DEEPNESS 1
 
 
-
 struct Chunk {
     std::vector<glm::vec3> m_Positions;
     BoundBox m_BoundBox;
@@ -26,14 +25,28 @@ class ChunkHolder {
 public: // functions
     ChunkHolder(uint32_t chunk_am, float sphere_radius);
     
+    inline uint32_t GetVertChunkAmount() {
+        return chunkAmount;
+    }
+    inline uint32_t GetTotalChunkAmount() {
+        return chunkAmount * chunkAmount;
+    }
+    inline uint32_t GetTotalNumOfSpheres(){
+        return totalNumOfSpheres;
+    }
+    inline float GetSphereRadius(){
+        return sphereRadius;
+    }
+
 public: // variables
     std::vector<Chunk> chunks;
-    uint32_t totalNumOfSpheres;
-    uint32_t chunkAmount; //  total chunk size is chunkSize * chunkSize
-    float sphereRadius;
+    
 
 private: // variables
     std::vector<std::vector<float>> heightMap; // 2D random Map Coords
+    uint32_t totalNumOfSpheres;
+    uint32_t chunkAmount; //  total chunk size is chunkSize * chunkSize
+    float sphereRadius;
 
     // noise variables
     FastNoiseLite base_noise;

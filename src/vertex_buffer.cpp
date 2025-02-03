@@ -14,7 +14,7 @@ VertexBuffer::~VertexBuffer() {
     glDeleteBuffers(1, &m_VBO);
 }
 
-VertexBuffer::VertexBuffer(VertexBuffer && other) noexcept : m_VBO(other.m_VBO) {
+VertexBuffer::VertexBuffer(VertexBuffer && other) noexcept : m_VBO(other.m_VBO), m_VertAmount(other.m_VertAmount){
     other.m_VBO = 0;
 }
 

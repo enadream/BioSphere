@@ -14,14 +14,16 @@ void ChunkHolder::generateChunks() {
     chunks.reserve(chunkAmount * chunkAmount);
     for (uint32_t i = 0; i < chunkAmount; i++){
         // process chunks row by row
-        for (uint32_t j = 0; j < chunkAmount; i++){
+        for (uint32_t j = 0; j < chunkAmount; j++){
             chunks.emplace_back();
             // generate last appended chunk
-            generateChunk(z_offset, x_offset, chunks.size());
+            generateChunk(z_offset, x_offset, chunks.size()-1);
             // increase x offset
             x_offset += CHUNK_SIZE;
         }
+        x_offset = 1;
         z_offset += CHUNK_SIZE;
+        
     }
 }
 
@@ -80,6 +82,8 @@ void ChunkHolder::generateHeightMap() {
 
     const uint32_t terrainX = chunkAmount * CHUNK_SIZE + 2; 
     const uint32_t terrainZ = chunkAmount * CHUNK_SIZE + 2;
+
+    heightMap.reserve(terrainZ);
 
     // find terrain discrete hight map
     for (uint32_t i = 0; i < terrainZ; i++){

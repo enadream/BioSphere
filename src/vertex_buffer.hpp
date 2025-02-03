@@ -21,6 +21,9 @@ public: // functions
     inline void Bind() const {
         glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
     }
+    inline void Unbind() const {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
     inline uint32_t GetID() const{
         return m_VBO;
     }

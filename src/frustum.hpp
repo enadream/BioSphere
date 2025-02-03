@@ -14,22 +14,22 @@ struct Plane {
     float distance;
 
     Plane() = default;
+    Plane(const glm::vec3& norm, const float dist) : normal(norm), distance(dist) { }
+    Plane(const glm::vec3& norm, const glm::vec3& p1) : normal(glm::normalize(norm)), distance(glm::dot(normal, p1)) { }
 
-    Plane(const glm::vec3& p1, const glm::vec3& norm)
-		: normal(glm::normalize(norm)),
-		distance(glm::dot(normal, p1))
-	{}
-
+    float GetSignedDistance(const glm::vec3 &point) const {
+        return glm::dot(normal, point) - distance;
+    }
 };
 
 struct Frustum {
-    std::array<Plane, 6> planes;
+    std::array<glm::vec4, 6> planes;
 
-    void Print(){
-        for (int i = 0; i < planes.size(); i++){
-            printf("normal : %f, %f, %f dist: %f\n", planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
-        }
-    }
+    // void Print(){
+    //     for (int i = 0; i < planes.size(); i++){
+    //         printf("normal : %f, %f, %f dist: %f\n", planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
+    //     }
+    // }
 };
 
 #endif
