@@ -99,6 +99,7 @@ void main(){
     
     //resultColor = pow(resultColor, vec3(2.2));
     // Set the final fragment color
+    //float val = sqrt(1 - (dist2Center/v_ScaledRadius));
     FragColor = vec4(resultColor, 1.0);
 }
 

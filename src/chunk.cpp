@@ -43,16 +43,36 @@ void ChunkHolder::generateChunk(const uint32_t z_off, const uint32_t x_off, uint
     for (uint32_t i = z_off; i < z_off+CHUNK_SIZE; i++){
         float zValue = i*sphereRadius;
         for (uint32_t j = x_off; j < x_off+CHUNK_SIZE; j++){
+            constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
+                {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
             float xValue = j*sphereRadius;
             float yValue = heightMap[i][j];
 
+            if ((i+j)%2 == 1){
+                continue;
+                
+                // check if 4 neighbour if they have same hight value then you don't need to append this sphere
+                float hightLevel = heightMap[i+neighbs[0][0]][j+neighbs[0][1]];
+                bool sameHight = true;
+
+                for (uint32_t k = 1; k < 4; k++){
+                    if (hightLevel != heightMap[i+neighbs[k][0]][j+neighbs[k][1]]){
+                        sameHight = false;
+                        break;
+                    }
+                }
+                if (sameHight)
+                    chunks[chunk_id].m_Positions.emplace_back(xValue, yValue, zValue);
+                continue;
+            }
+            
             chunks[chunk_id].m_Positions.emplace_back(xValue, yValue, zValue);
             chunks[chunk_id].m_BoundBox.maxY = glm::max(yValue+sphereRadius, chunks[chunk_id].m_BoundBox.maxY);
             chunks[chunk_id].m_BoundBox.minY = glm::min(yValue-sphereRadius, chunks[chunk_id].m_BoundBox.minY);
 
             // check 8 neighbour find the highest difference , [z][x]
-            constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
-                {-1, -1}, {-1, 1}, {1, -1}, {1, 1}}; 
+            
             float maxDiff = 0.0f;
             for (int k = 0; k < 8; k++){
                 float difference = yValue - heightMap[i+neighbs[k][0]][j+neighbs[k][1]];

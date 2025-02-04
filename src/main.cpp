@@ -23,6 +23,7 @@
 #include "bound_box.hpp"
 #include "chunk.hpp"
 #include "draw_array_command.hpp"
+#include "gl_buffer.hpp"
 
 static Camera * m_MainCamera;
 
@@ -44,7 +45,7 @@ float generateHeight(const glm::vec3& position);
 float terrain_height(const glm::vec3& position);
 
 int main(){
-    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f), 1.0f, 10000.0f, 800, 600);
+    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f), 1.0f, 1000.0f, 800, 600);
     m_MainCamera = &cam;
 
     glfwInit();
@@ -99,7 +100,7 @@ int main(){
 
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkHolder chunkHolder(100, sphereRadius); // total amount of chunk is x*x
+    ChunkHolder chunkHolder(200, sphereRadius); // total amount of chunk is x*x
     cam.SetPositionX(chunkHolder.GetVertChunkAmount()*CHUNK_SIZE*sphereRadius / 2.0f);
     cam.SetPositionY(150.0f);
     cam.SetPositionZ(chunkHolder.GetVertChunkAmount()*CHUNK_SIZE*sphereRadius / 2.0f);
@@ -142,8 +143,11 @@ int main(){
     printf("Total number of spheres: %u\n", chunkHolder.GetTotalNumOfSpheres());
 
     // create command array
-    std::vector<DrawArraysIndirectCommand> drawCommands;
-    drawCommands.reserve(chunkHolder.GetTotalChunkAmount());
+    //std::vector<DrawArraysIndirectCommand> drawCommands;
+    //drawCommands.reserve(chunkHolder.GetTotalChunkAmount());
+    //Buffer commandBuffer(GL_DRAW_INDIRECT_BUFFER);
+    //commandBuffer.GenBuffer(chunkHolder.GetTotalChunkAmount()*sizeof(DrawArraysIndirectCommand), 
+    //    nullptr, chunkHolder.GetTotalChunkAmount(), GL_DYNAMIC_DRAW);
 
     // Sphere TEXTURES
     std::vector<string> spFaces = 
@@ -249,7 +253,6 @@ int main(){
         // calculate view frustum
         cam.CalculateFrustum();
 
-        
         // set uniform data of sphere shader
         sphereShader.Use();
         sphereShader.SetUniformMatrix4fv("u_ProjView", projView);
@@ -264,18 +267,32 @@ int main(){
         glBindVertexArray(sphereVAO);
         //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, instanceVBO.GetVertAmount());
         
-        
+        // // load visible chunks to the command array
+        // drawCommands.resize(0);
+        // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+        //     if (chunkHolder.chunks[i].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
+        //         drawCommands.emplace_back(4, chunkHolder.chunks[i].m_Positions.size(), 0, chunkHolder.chunks[i].m_StartIndex);
+        //     }
+        // }
+        // // load array to the buffer
+        // commandBuffer.Bind();
+        // glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, drawCommands.size()*sizeof(DrawArraysIndirectCommand), drawCommands.data());
+        // // draw command buffer
+        // glMultiDrawArraysIndirect(GL_TRIANGLE_STRIP, 0, drawCommands.size(), 0);
+
         // for (uint32_t i = 0; i < 400000; i++){ // max 400 k frustum check is good
         //     if (chunkHolder.chunks[0].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
         //         test += i*1;
         //     }
         // }
         
+        uint32_t visibleobj = 0;
         // draw spheres
         for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
             if (chunkHolder.chunks[i].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
                 glDrawArraysInstancedBaseInstance(GL_TRIANGLE_STRIP, 0, 4, chunkHolder.chunks[i].m_Positions.size(),
                     chunkHolder.chunks[i].m_StartIndex);
+                visibleobj++;
                 // boxShader.Use();
                 // boxShader.SetUniformMatrix4fv("u_ProjView", projView);
                 
@@ -296,6 +313,7 @@ int main(){
             // box.Bind();
             // glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());  
         }
+        //printf("Total num of visible objects: %u\n", visibleobj);
         // boxShader.Use();
         // boxShader.SetUniformMatrix4fv("u_ProjView", projView);
         

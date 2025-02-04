@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <vector>
+#include <array>
 #include <glm/glm.hpp>
 #include <algorithm>
 
@@ -10,10 +11,24 @@
 #include "math/FastNoiseLite.hpp"
 
 // chunks will be square with this value 32*32
-#define CHUNK_SIZE 32
+#define CHUNK_SIZE 16
 // the deepness of indiviual quad 16*16 * 4
 #define CHUNK_QUAD_DEEPNESS 1
 
+struct Sphere { // 4 bytes
+    uint8_t xOffset;
+    uint8_t zOffset;
+    int16_t yOffset;
+};
+
+struct ChunkPos { // 16 bytes
+    int64_t x;
+    int64_t z;
+};
+
+struct Grid {
+    std::array<std::vector<Sphere>, CHUNK_SIZE*CHUNK_SIZE> grid;
+};
 
 struct Chunk {
     std::vector<glm::vec3> m_Positions;

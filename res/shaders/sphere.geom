@@ -24,7 +24,7 @@ void main(){
     
     float distCenterToCam = length(u_CameraPos - center);
 
-    if (distCenterToCam > u_FarDist || distCenterToCam < (u_Radius*1.001)){
+    if (distCenterToCam < (u_Radius*1.001)){
         return;
     }
     
