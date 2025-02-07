@@ -23,37 +23,38 @@ void ChunkHolder::generateChunks() {
         }
         x_offset = 1;
         z_offset += CHUNK_SIZE;
-        
     }
 }
 
-void ChunkHolder::generateChunk(const uint32_t z_off, const uint32_t x_off, uint32_t chunk_id) {
+void ChunkHolder::generateChunk(const int32_t z_off, const int32_t x_off, uint32_t chunk_id) {
     chunks[chunk_id].m_StartIndex = totalNumOfSpheres;
-    
+    // set chunks position data
+    chunks[chunk_id].m_Position.z = z_off;
+    chunks[chunk_id].m_Position.x = x_off;
     // set bounding box, because these are origins of spheres I need to add
     chunks[chunk_id].m_BoundBox.minZ = z_off*sphereRadius - sphereRadius;
     chunks[chunk_id].m_BoundBox.minZ = (z_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
     chunks[chunk_id].m_BoundBox.minX = x_off*sphereRadius - sphereRadius;
     chunks[chunk_id].m_BoundBox.maxX = (x_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
     // set the y value to the first value
-    chunks[chunk_id].m_BoundBox.minY = heightMap[z_off][x_off] - sphereRadius;
-    chunks[chunk_id].m_BoundBox.maxY = heightMap[z_off][x_off] + sphereRadius;
+    chunks[chunk_id].m_BoundBox.minY = heightMap[z_off][x_off]*sphereRadius - sphereRadius;
+    chunks[chunk_id].m_BoundBox.maxY = heightMap[z_off][x_off]*sphereRadius + sphereRadius;
 
 
     for (uint32_t i = z_off; i < z_off+CHUNK_SIZE; i++){
-        float zValue = i*sphereRadius;
+        uint8_t zValue = i-z_off;
         for (uint32_t j = x_off; j < x_off+CHUNK_SIZE; j++){
             constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
                 {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
-            float xValue = j*sphereRadius;
-            float yValue = heightMap[i][j];
+            uint8_t xValue = j-x_off;
+            int16_t yValue = heightMap[i][j];
 
             if ((i+j)%2 == 1){
                 continue;
                 
                 // check if 4 neighbour if they have same hight value then you don't need to append this sphere
-                float hightLevel = heightMap[i+neighbs[0][0]][j+neighbs[0][1]];
+                int16_t hightLevel = heightMap[i+neighbs[0][0]][j+neighbs[0][1]];
                 bool sameHight = true;
 
                 for (uint32_t k = 1; k < 4; k++){
@@ -63,62 +64,62 @@ void ChunkHolder::generateChunk(const uint32_t z_off, const uint32_t x_off, uint
                     }
                 }
                 if (sameHight)
-                    chunks[chunk_id].m_Positions.emplace_back(xValue, yValue, zValue);
+                    chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
                 continue;
             }
             
-            chunks[chunk_id].m_Positions.emplace_back(xValue, yValue, zValue);
-            chunks[chunk_id].m_BoundBox.maxY = glm::max(yValue+sphereRadius, chunks[chunk_id].m_BoundBox.maxY);
-            chunks[chunk_id].m_BoundBox.minY = glm::min(yValue-sphereRadius, chunks[chunk_id].m_BoundBox.minY);
+            chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
+            chunks[chunk_id].m_BoundBox.maxY = glm::max(yValue*sphereRadius + sphereRadius, chunks[chunk_id].m_BoundBox.maxY);
+            chunks[chunk_id].m_BoundBox.minY = glm::min(yValue*sphereRadius - sphereRadius, chunks[chunk_id].m_BoundBox.minY);
 
             // check 8 neighbour find the highest difference , [z][x]
-            
-            float maxDiff = 0.0f;
-            for (int k = 0; k < 8; k++){
-                float difference = yValue - heightMap[i+neighbs[k][0]][j+neighbs[k][1]];
+            int16_t maxDiff = 0;
+            for (int16_t k = 0; k < 8; k++){
+                int16_t difference = yValue - heightMap[i+neighbs[k][0]][j+neighbs[k][1]];
                 if (difference > maxDiff)
                     maxDiff = difference;
             }
 
             // if difference bigger than sphereRadius create more spheres to fill the gap
-            int64_t fillAmount = (maxDiff)/(sphereRadius*2);
-            for (uint32_t f = 1; f <= fillAmount; f++){
-                float fillY = yValue - f*(sphereRadius*2);
-                chunks[chunk_id].m_Positions.emplace_back(xValue, fillY, zValue);
+            for (int16_t f = 2; f <= maxDiff; f += 2){
+                int16_t fillY = yValue - f;
+                chunks[chunk_id].m_Spheres.emplace_back(xValue, fillY, zValue);
             }
 
             // check minimum y value again
-            float fillY = yValue - fillAmount*(sphereRadius*2);
-            chunks[chunk_id].m_BoundBox.minY = glm::min(fillY-sphereRadius, chunks[chunk_id].m_BoundBox.minY);
+            int16_t fillY = yValue - (maxDiff/2)*2;
+            chunks[chunk_id].m_BoundBox.minY = glm::min(fillY*sphereRadius - sphereRadius, chunks[chunk_id].m_BoundBox.minY);
         }
     }
     // add total number of chunks
-    totalNumOfSpheres += chunks[chunk_id].m_Positions.size();
+    totalNumOfSpheres += chunks[chunk_id].m_Spheres.size();
 }
 
 void ChunkHolder::generateHeightMap() {
     // init noise
     initNoise();
 
-    const uint32_t terrainX = chunkAmount * CHUNK_SIZE + 2; 
-    const uint32_t terrainZ = chunkAmount * CHUNK_SIZE + 2;
+    const int32_t terrainX = chunkAmount * CHUNK_SIZE + 2; 
+    const int32_t terrainZ = chunkAmount * CHUNK_SIZE + 2;
 
     heightMap.reserve(terrainZ);
 
     // find terrain discrete hight map
-    for (uint32_t i = 0; i < terrainZ; i++){
+    for (int32_t i = 0; i < terrainZ; i++){
         heightMap.emplace_back();
         heightMap[i].reserve(terrainX);
         float zValue = i*sphereRadius;
 
-        for (uint32_t j = 0; j < terrainX; j++){
+        for (int32_t j = 0; j < terrainX; j++){
             float xValue = j*sphereRadius;
-            float yOffset = ((i+j) % 2) * sphereRadius;
-            float yValue = getTerrainHeight(xValue, zValue); //getTerrainHeight(xValue, zValue) - yOffset;
-            int64_t discrete = (yValue/(sphereRadius*2));
-            yValue = (discrete * (sphereRadius*2)) + yOffset;
+            float heightValue = getTerrainHeight(xValue, zValue); //getTerrainHeight(xValue, zValue) - yOffset;
+            int16_t discreteY = heightValue/sphereRadius;
 
-            heightMap[i].push_back(yValue);
+            //int16_t layerOffset = (i+j) % 2;
+            //int16_t heightOffset = discreteY % 2;
+            discreteY -= ((i+j) + discreteY) % 2;
+            
+            heightMap[i].push_back(discreteY);
         }
     }
 }

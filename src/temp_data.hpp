@@ -45,6 +45,14 @@ static float s_vertices1[] = {
     -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,  0.0f,  1.0f,  0.0f
 };
 
+static float s_strip_quad[] = {
+    // positions            // texture
+    -0.50f, -0.50f, 0.0f,   0.0f, 0.0f,
+     0.50f, -0.50f, 0.0f,   1.0f, 0.0f,
+    -0.50f,  0.50f, 0.0f,   0.0f, 1.0f,
+     0.50f,  0.50f, 0.0f,   1.0f, 1.0f,
+};
+
 static float s_quad_verts[] = {
     // positions
     -0.50f, -0.50f, 0.0f,   

@@ -7,8 +7,6 @@
 
 using std::string, std::vector;
 
-#define MAX_TEXTURE_PATH_SIZE 127
-
 enum class TextureType : uint8_t {
     UNDEFINED,
     DIFFUSE,
@@ -16,6 +14,57 @@ enum class TextureType : uint8_t {
     NORMAL,
     HEIGHT,
     EMISSION,
+    IMAGE
+};
+
+class Texture {
+public: // functions
+    Texture(GLenum gl_type, TextureType tex_type);
+    ~Texture();
+
+    // copy constructors
+    Texture(const Texture&) = delete;
+    Texture& operator=(const Texture&) = delete;
+    // move constructor
+    Texture(Texture &&other) noexcept;
+
+    // you should set tex parameters first before calling this function!
+    void LoadFromFile(const char* path);
+    // always bind before using this function
+    void SetTexParametrI(GLenum pname, GLint param);
+    void AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data);
+
+    inline void Bind() const {
+        glBindTexture(m_GLType, m_TextureID);
+    }
+    inline void BindTo(uint8_t slot_id) const {
+        glActiveTexture(GL_TEXTURE0 + slot_id);
+        glBindTexture(m_GLType, m_TextureID);
+    }
+    inline void BindImageTexture(GLuint unit, GLint level, GLboolean layered, GLint layer, GLenum access) const {
+        glBindImageTexture(unit, m_TextureID, level, layered, layer, access, m_Format);
+    }
+    inline void Unbind() const {
+        glBindTexture(m_GLType, 0);
+    }
+    inline uint32_t GetID() const {
+        return m_TextureID;
+    }
+    inline uint32_t GetWidth(){
+        return m_Width;
+    }
+    inline uint32_t GetHeight(){
+        return m_Height;
+    }
+public: // variables
+private: // variables
+    int32_t m_Width, m_Height, m_Format;
+    uint32_t m_TextureID;
+    GLenum m_GLType;
+    TextureType m_Type;
+    bool m_Allocated;
+private: // functions
+
 };
 
 // base class
@@ -45,13 +94,13 @@ protected: // variables
     bool m_IsLoaded;
 };
 
-class Texture : public BaseTexture {
+class SimpleTexture : public BaseTexture {
 public: // functions
-    Texture(const char* path, TextureType type = TextureType::UNDEFINED);
-    Texture();
+    SimpleTexture(const char* path, TextureType type = TextureType::UNDEFINED);
+    SimpleTexture();
 
     // Move constructor
-    Texture(Texture&& other) noexcept;
+    SimpleTexture(SimpleTexture&& other) noexcept;
 
     void LoadTexture(const char* path, TextureType type = TextureType::UNDEFINED);
 
@@ -76,6 +125,7 @@ public: // functions
         glBindTexture(GL_TEXTURE_CUBE_MAP, m_TextureID);
     }
 };
+
 
 
 #endif

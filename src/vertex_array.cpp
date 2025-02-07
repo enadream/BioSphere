@@ -26,12 +26,13 @@ void VertexArray::GenIndexBuffer(uint32_t size, const void*data, IndexType data_
     m_IndxBuffer.GenIndexBuffer(size, data, data_type, usage);
 }
 
-void VertexArray::InsertLayout(uint32_t index, uint32_t count, GLenum gl_type, GLboolean normalize, uint32_t row_size, void* offset){
+void VertexArray::InsertLayout(uint32_t index, uint32_t count, GLenum gl_type, GLboolean normalize, uint32_t row_size, uint32_t offset){
     if (m_VertBuffer.GetID()){
         Bind();
         m_VertBuffer.Bind();
         glEnableVertexAttribArray(index);
-        glVertexAttribPointer(index, count, gl_type, normalize, row_size, offset);
+        glVertexAttribPointer(index, count, gl_type, normalize, row_size, (void*)offset);
+        Unbind();
     }
     else {
         printf("[ERROR]: You can't insert layout because Vertex buffer didn't generated.\n");

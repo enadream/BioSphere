@@ -1,0 +1,64 @@
+#version 460 core
+// Define a work group size. Adjust the local size as needed.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct ChunkInfo { // 16 + 12 + 12 = 40 bytes
+    uint offset;
+    uint size;
+    ivec2 pos;
+    vec3 bbMin;
+    vec3 bbMax;
+};
+struct VisibleChunk { // 16 bytes
+    uint offset;
+    uint size;
+    ivec2 pos; 
+};
+
+// Binding 0: the input chunk data.
+layout(std430, binding = 0) buffer ChunkBuffer {
+    ChunkInfo chunks[];
+};
+// Binding 1: output visible chunk indices.
+layout(std430, binding = 1) buffer VisibleBuffer {
+    VisibleChunk visibleChunks[];
+};
+// Binding 2: an atomic count to count visible chunks.
+layout(binding = 2, offset = 0) uniform atomic_uint visibleCount;
+
+// Frustum planes: 6 planes, each defined as a vec4 (plane normal xyz, and distance w).
+uniform vec4 frustumPlanes[6];
+
+// A function to test if an AABB is at least partially inside the frustum.
+bool isAABBVisible(in vec3 minPt, in vec3 maxPt);
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    // Guard against reading beyond our array.
+    if (index < chunks.length()){
+        ChunkInfo chunk = chunks[index];
+        // Perform frustum culling on the chunk's bounding box.
+        if (isAABBVisible(chunk.bbMin, chunk.bbMax)) {
+            // Atomically get an index into the visibleIndices array.
+            uint outIndex = atomicCounterIncrement(visibleCount);
+            // copy the values into visible chunks
+            visibleChunks[outIndex].offset = chunk.offset;
+            visibleChunks[outIndex].size = chunk.size;
+            visibleChunks[outIndex].pos = chunk.pos;
+        }
+    }
+}
+
+bool isAABBVisible(vec3 minPt, vec3 maxPt){
+    for (int i = 0; i < 6; i++){
+        // For each plane, compute the "positive vertex" from the AABB.
+        vec3 p = minPt;
+        if (frustumPlanes[i].x >= 0.0) p.x = maxPt.x;
+        if (frustumPlanes[i].y >= 0.0) p.y = maxPt.y;
+        if (frustumPlanes[i].z >= 0.0) p.z = maxPt.z;
+        // If this vertex is outside the plane, the entire AABB is outside.
+        if (dot(vec3(frustumPlanes[i].xyz), p) + frustumPlanes[i].w < 0.0)
+            return false;
+
+    }
+}

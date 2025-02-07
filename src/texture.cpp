@@ -2,6 +2,82 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+//////////// Texture ////////////
+Texture::Texture(GLenum gl_type, TextureType tex_type) : 
+    m_Width(0), m_Height(0), m_Format(0), m_GLType(gl_type), m_Type(tex_type), m_Allocated(false) {
+    glGenTextures(1, &m_TextureID);
+}
+Texture::~Texture() {
+    glDeleteTextures(1, &m_TextureID);
+}
+Texture::Texture(Texture &&other) noexcept : 
+    m_Width(other.m_Width), m_Height(other.m_Height), m_Format(other.m_Format), m_TextureID(other.m_TextureID),
+    m_GLType(other.m_GLType), m_Type(other.m_Type) {
+    // falsify texture ID
+    other.m_TextureID = 0;
+}
+void Texture::SetTexParametrI(GLenum pname, GLint param) {
+    glTexParameteri(m_GLType, pname, param);
+}
+void Texture::AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data){
+    if (!m_Allocated){
+        m_Width = width;
+        m_Height = height;
+        m_Format = internalFormat;
+        glBindTexture(m_GLType, m_TextureID);
+        glTexImage2D(m_GLType, level, internalFormat, width, height, 0, format, type, data);
+    } else {
+        printf("[ERROR]: The texture already allocated. New allocation is not permitted!\n");
+    }
+}
+void Texture::LoadFromFile(const char* path){
+    if (!m_Allocated){
+        // load and generate the texture
+        stbi_set_flip_vertically_on_load(true);
+        int32_t numOfChannel;
+        uint8_t * buffer = stbi_load(path, &m_Width, &m_Height, &numOfChannel, 0);
+
+        if (buffer){
+            // generating texture
+            glBindTexture(m_GLType, m_TextureID);
+            int32_t channelType;
+            switch (numOfChannel)
+            {
+            case 4:
+                channelType = GL_RGBA;
+                break;
+            case 3:
+                channelType = GL_RGB;
+                break;
+            case 2:
+                channelType = GL_RG;
+                break;
+            case 1:
+                channelType = GL_RED;
+                break;
+            default:
+                printf("[ERROR]: Texture data dimensions are wrong!\n");
+                return;
+            }
+            // load data from buffer
+            glTexImage2D(m_GLType, 0, channelType, m_Width, m_Height, 0, channelType, GL_UNSIGNED_BYTE, buffer);
+            glGenerateMipmap(m_GLType);
+            stbi_image_free(buffer);
+            m_Allocated = true;
+            // unbind
+            glBindTexture(m_GLType, 0);
+        } else {
+            printf("[ERROR]: Texture data couldn't loaded. Check the path=\"%s\" \n", path);
+            m_TextureID = 0;
+            m_Allocated = false;
+        }
+    } else {
+        printf("[ERROR]: The texture already allocated. New allocation is not permitted! path=\"%s\"\n", path);
+    }
+}
+
+//////////// BaseTexture ////////////
+
 BaseTexture::BaseTexture() : m_TextureID(0), m_IsLoaded(false) {}
 
 BaseTexture::~BaseTexture(){
@@ -21,14 +97,14 @@ void BaseTexture::UnloadTexture(){
     }
 }
 
-//////////// Texture ////////////
-Texture::Texture(const char* path, TextureType type){
+//////////// SimpleTexture ////////////
+SimpleTexture::SimpleTexture(const char* path, TextureType type){
     LoadTexture(path, type);
 }
-Texture::Texture() : BaseTexture() {}
-Texture::Texture(Texture&& other) noexcept : BaseTexture(std::move(other)) {}
+SimpleTexture::SimpleTexture() : BaseTexture() {}
+SimpleTexture::SimpleTexture(SimpleTexture&& other) noexcept : BaseTexture(std::move(other)) {}
 
-void Texture::LoadTexture(const char* path, TextureType type){
+void SimpleTexture::LoadTexture(const char* path, TextureType type){
     if (!m_IsLoaded){
         // update data
         m_Path = path;
