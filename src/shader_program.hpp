@@ -109,12 +109,19 @@ inline void SetUniform3fv(const int32_t &uniform_id, float x, float y, float z){
     float vec3[3] = {x, y, z};
     glUniform3fv(uniform_id, 1, vec3);
 }
-inline void SetUniform3fv(const string& uniform_name, const glm::vec3 &value){
+inline void SetUniform3fv(const string& uniform_name, const glm::vec3 &value, int count = 1){
     int32_t id = GetUniformID(uniform_name);
-    glUniform3fv(id, 1, glm::value_ptr(value));
+    glUniform3fv(id, count, glm::value_ptr(value));
 }
-inline void SetUniform3fv(const int32_t &uniform_id, const glm::vec3 &value){
-    glUniform3fv(uniform_id, 1, glm::value_ptr(value));
+inline void SetUniform3fv(const int32_t &uniform_id, const glm::vec3 &value, int count = 1){
+    glUniform3fv(uniform_id, count, glm::value_ptr(value));
+}
+inline void SetUniform4fv(const string& uniform_name, const glm::vec4 &value, int count = 1){
+    int32_t id = GetUniformID(uniform_name);
+    glUniform4fv(id, count, glm::value_ptr(value));
+}
+inline void SetUniform4fv(const int32_t &uniform_id, const glm::vec4 &value, int count = 1){
+    glUniform4fv(uniform_id, count, glm::value_ptr(value));
 }
 };
 

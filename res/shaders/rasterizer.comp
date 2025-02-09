@@ -1,0 +1,54 @@
+#version 460 core
+// Define a work group size. Adjust the local size as needed.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct Sphere {
+    ivec3 pos;
+    float radius;
+};
+
+// Binding point 0: SSBO with sphere data (vec4: xyz = center, w = radius)
+layout(std430, binding = 0) buffer Spheres {
+    Sphere spheres[];
+};
+
+// Output image declared as an integer image for atomic operations.
+// (The texture format should be set to a 32-bit integer format, e.g. GL_R32I.)
+layout(r32i, binding = 1) uniform iimage2D outImage;
+
+// uniforms
+uniform mat4 u_ProjView;      // Combined view-projection matrix
+uniform mat4 u_View;          // View matrix (for computing view-space depth).
+uniform ivec2 u_ScreenSize;    // [width, height] in pixels
+uniform float u_FocalLength;
+uniform uint u_TotalNumOfSpheres;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= u_TotalNumOfSpheres){
+        return;
+    }
+
+    // 1. Retrieve sphere data.
+    Sphere targetSphere = spheres[index];
+    float radiusWorld = targetSphere.radius;
+    vec3 centerWorld = radiusWorld * targetSphere.pos;
+
+    // 2. Compute the screen-space center.
+    // Transform the sphere center to clip space.
+    vec4 clipCenter = u_ProjView * vec4(centerWorld, 1.0);
+    // Perspective divide to get normalized device coordinates (NDC).
+    vec3 ndcCenter = clipCenter.xyz / clipCenter.w;
+    // Map NDC (-1 to 1) to screen coordinates.
+    vec2 screenCenter = (ndcCenter.xy * 0.5 + 0.5) * u_ScreenSize;
+
+    // 3. Compute view-space depth and projected radius.
+    vec3 viewCenter = (u_View * vec4(centerWorld, 1.0)).xyz;
+    // Assume the camera looks down -Z so we take depth as -viewCenter.z.
+    float depth = -viewCenter.z;  // depth > 0 if in front of the camera.
+
+    // The sphere's projected radius in screen space (in pixels).
+    float screenRadius = (radiusWorld * u_FocalLength) / depth;
+
+    // 4. Determine the square region (pixel bounds) to update.
+}

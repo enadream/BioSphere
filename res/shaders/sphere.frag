@@ -2,7 +2,6 @@
 //layout (early_fragment_tests) in; // Force early testing
 //layout (depth_less) out float gl_FragDepth; // Hint for driver
 
-
 struct Material {
     sampler2D DiffuseTexture;
     sampler2D SpecularTexture;
@@ -57,7 +56,6 @@ uniform float u_Radius;
 uniform vec3 u_CameraPos;
 uniform vec3 u_Color;
 
-
 uniform Material u_Material;
 uniform DirectLight u_DirLight;
 uniform PointLight u_PointLight;
@@ -96,10 +94,8 @@ void main(){
 
     vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir, fragRealPos);
     //float val = (v_FragPos.y + MaxHeight/2.0f) / MaxHeight;
-    
-    //resultColor = pow(resultColor, vec3(2.2));
-    // Set the final fragment color
     //float val = sqrt(1 - (dist2Center/v_ScaledRadius));
+
     FragColor = vec4(resultColor, 1.0);
 }
 

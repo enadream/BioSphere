@@ -14,7 +14,8 @@ enum class TextureType : uint8_t {
     NORMAL,
     HEIGHT,
     EMISSION,
-    IMAGE
+    IMAGE,
+    DEPTH
 };
 
 class Texture {
@@ -32,6 +33,7 @@ public: // functions
     void LoadFromFile(const char* path);
     // always bind before using this function
     void SetTexParametrI(GLenum pname, GLint param);
+    // automatically binds, reallocation allowed
     void AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data);
 
     inline void Bind() const {
@@ -55,6 +57,9 @@ public: // functions
     }
     inline uint32_t GetHeight(){
         return m_Height;
+    }
+    inline GLenum GetType(){
+        return m_GLType;
     }
 public: // variables
 private: // variables

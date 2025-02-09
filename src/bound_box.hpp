@@ -21,9 +21,12 @@ public: // functions
     glm::vec3 GetSize();
 
 public: // variables
-    float minX, maxX; // X-axis bounds
-    float minY, maxY; // Y-axis bounds
-    float minZ, maxZ; // Z-axis bounds
+    glm::vec3 m_Min;
+    glm::vec3 m_Max;
+
+    // float minX, maxX; // X-axis bounds
+    // float minY, maxY; // Y-axis bounds
+    // float minZ, maxZ; // Z-axis bounds
 
 private: // variables
 

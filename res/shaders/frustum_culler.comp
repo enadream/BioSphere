@@ -6,31 +6,35 @@ struct ChunkInfo { // 16 + 12 + 12 = 40 bytes
     uint offset;
     uint size;
     ivec2 pos;
-    vec3 bbMin;
-    vec3 bbMax;
+    float bbMinX, bbMinY, bbMinZ;
+    float bbMaxX, bbMaxY, bbMaxZ;
 };
-struct VisibleChunk { // 16 bytes
-    uint offset;
-    uint size;
-    ivec2 pos; 
+struct Ivec3{
+    int x;
+    int y;
+    int z;
 };
 
 // Binding 0: the input chunk data.
-layout(std430, binding = 0) buffer ChunkBuffer {
+layout(std430, binding = 0) readonly buffer ChunkBuffer {
     ChunkInfo chunks[];
 };
-// Binding 1: output visible chunk indices.
-layout(std430, binding = 1) buffer VisibleBuffer {
-    VisibleChunk visibleChunks[];
+// Binding 1: input packed sphere positions
+layout(std430, binding = 1) readonly buffer SpherePositionBuffer {
+    uint packedSpheres[];
 };
-// Binding 2: an atomic count to count visible chunks.
-layout(binding = 2, offset = 0) uniform atomic_uint visibleCount;
+// Binding 2: output visible sphere buffer
+layout(std430, binding = 2) buffer VisibleSphereBuffer {
+    Ivec3 visibleSpheres[];
+};
+// Binding 3: an atomic count to count visible chunks.
+layout(binding = 3, offset = 0) uniform atomic_uint visibleSphereCount;
 
 // Frustum planes: 6 planes, each defined as a vec4 (plane normal xyz, and distance w).
-uniform vec4 frustumPlanes[6];
+layout (location = 0) uniform vec4 u_frustumPlanes[6];
 
 // A function to test if an AABB is at least partially inside the frustum.
-bool isAABBVisible(in vec3 minPt, in vec3 maxPt);
+bool IsAABBVisible(vec3 minPt, vec3 maxPt);
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
@@ -38,27 +42,63 @@ void main() {
     if (index < chunks.length()){
         ChunkInfo chunk = chunks[index];
         // Perform frustum culling on the chunk's bounding box.
-        if (isAABBVisible(chunk.bbMin, chunk.bbMax)) {
+        vec3 bbmin = vec3(chunk.bbMinX, chunk.bbMinY, chunk.bbMinZ);
+        vec3 bbmax = vec3(chunk.bbMaxX, chunk.bbMaxY, chunk.bbMaxZ);
+
+        if (IsAABBVisible(bbmin, bbmax)) { // IsAABBVisible(bbmin, bbmax)
             // Atomically get an index into the visibleIndices array.
-            uint outIndex = atomicCounterIncrement(visibleCount);
-            // copy the values into visible chunks
-            visibleChunks[outIndex].offset = chunk.offset;
-            visibleChunks[outIndex].size = chunk.size;
-            visibleChunks[outIndex].pos = chunk.pos;
+            uint drawIndex = atomicCounterAdd(visibleSphereCount, chunk.size);
+
+            for (uint i = 0; i < chunk.size; i++){
+                uint visibleID = drawIndex + i;
+                // get the packed position yVal(32-16) + zOffset(16-8) + xOffset(8-0)
+                uint packedPos = packedSpheres[chunk.offset + i];
+
+                // set x y and z
+                visibleSpheres[visibleID].x = chunk.pos.x + int(packedPos & 0xFF);
+                // chunk pos consists of 2 variable x and z but z is called y cuz of ivec2 standart
+                visibleSpheres[visibleID].z = chunk.pos.y + int((packedPos >> 8) & 0xFF);
+                // parsing y value
+                uint yValRaw = (packedPos >> 16) & 0xFFFF;
+                //Convert to a signed 16-bit integer:
+                int yVal = 0;
+                if ((yValRaw & 0x8000) != 0) {
+                    // Negative value: Sign-extend to 32 bits
+                    yVal = int(yValRaw | 0xFFFF0000);
+                } else {
+                    // Positive value
+                    yVal = int(yValRaw);
+                }
+                visibleSpheres[visibleID].y = yVal;
+            }
         }
     }
 }
 
-bool isAABBVisible(vec3 minPt, vec3 maxPt){
+bool IsAABBVisible(vec3 minPt, vec3 maxPt){
     for (int i = 0; i < 6; i++){
         // For each plane, compute the "positive vertex" from the AABB.
         vec3 p = minPt;
-        if (frustumPlanes[i].x >= 0.0) p.x = maxPt.x;
-        if (frustumPlanes[i].y >= 0.0) p.y = maxPt.y;
-        if (frustumPlanes[i].z >= 0.0) p.z = maxPt.z;
+        if (u_frustumPlanes[i].x >= 0.0) p.x = maxPt.x;
+        if (u_frustumPlanes[i].y >= 0.0) p.y = maxPt.y;
+        if (u_frustumPlanes[i].z >= 0.0) p.z = maxPt.z;
         // If this vertex is outside the plane, the entire AABB is outside.
-        if (dot(vec3(frustumPlanes[i].xyz), p) + frustumPlanes[i].w < 0.0)
+        if (dot(vec3(u_frustumPlanes[i].xyz), p) + u_frustumPlanes[i].w < 0.0)
             return false;
-
     }
+    return true; // If not rejected by any plane, the AABB is inside
+}
+
+bool IsSphereVisible(vec4 sphere_data){
+    for (int i = 0; i < 6; i++){
+        // Calculate signed distance from sphere center to the plane
+        float dist = dot(sphere_data.xyz, u_frustumPlanes[i].xyz) + u_frustumPlanes[i].w;
+
+        // If the sphere is entirely behind the plane, it's not visible
+        if (dist < -sphere_data.w) {
+            return false;
+        }
+    }
+
+    return true;
 }

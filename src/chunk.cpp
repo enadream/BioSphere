@@ -27,18 +27,18 @@ void ChunkHolder::generateChunks() {
 }
 
 void ChunkHolder::generateChunk(const int32_t z_off, const int32_t x_off, uint32_t chunk_id) {
-    chunks[chunk_id].m_StartIndex = totalNumOfSpheres;
-    // set chunks position data
-    chunks[chunk_id].m_Position.z = z_off;
-    chunks[chunk_id].m_Position.x = x_off;
+    chunks[chunk_id].m_ChunkInfo.offset = totalNumOfSpheres;
+    // set chunks position data // y means z axis
+    chunks[chunk_id].m_ChunkInfo.pos.x = x_off;
+    chunks[chunk_id].m_ChunkInfo.pos.y = z_off;
     // set bounding box, because these are origins of spheres I need to add
-    chunks[chunk_id].m_BoundBox.minZ = z_off*sphereRadius - sphereRadius;
-    chunks[chunk_id].m_BoundBox.minZ = (z_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
-    chunks[chunk_id].m_BoundBox.minX = x_off*sphereRadius - sphereRadius;
-    chunks[chunk_id].m_BoundBox.maxX = (x_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.z = z_off*sphereRadius - sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.z = (z_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.x = x_off*sphereRadius - sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.x = (x_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
     // set the y value to the first value
-    chunks[chunk_id].m_BoundBox.minY = heightMap[z_off][x_off]*sphereRadius - sphereRadius;
-    chunks[chunk_id].m_BoundBox.maxY = heightMap[z_off][x_off]*sphereRadius + sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = heightMap[z_off][x_off]*sphereRadius - sphereRadius;
+    chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y = heightMap[z_off][x_off]*sphereRadius + sphereRadius;
 
 
     for (uint32_t i = z_off; i < z_off+CHUNK_SIZE; i++){
@@ -69,8 +69,8 @@ void ChunkHolder::generateChunk(const int32_t z_off, const int32_t x_off, uint32
             }
             
             chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
-            chunks[chunk_id].m_BoundBox.maxY = glm::max(yValue*sphereRadius + sphereRadius, chunks[chunk_id].m_BoundBox.maxY);
-            chunks[chunk_id].m_BoundBox.minY = glm::min(yValue*sphereRadius - sphereRadius, chunks[chunk_id].m_BoundBox.minY);
+            chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y = glm::max(yValue*sphereRadius + sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y);
+            chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(yValue*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
 
             // check 8 neighbour find the highest difference , [z][x]
             int16_t maxDiff = 0;
@@ -88,9 +88,11 @@ void ChunkHolder::generateChunk(const int32_t z_off, const int32_t x_off, uint32
 
             // check minimum y value again
             int16_t fillY = yValue - (maxDiff/2)*2;
-            chunks[chunk_id].m_BoundBox.minY = glm::min(fillY*sphereRadius - sphereRadius, chunks[chunk_id].m_BoundBox.minY);
+            chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(fillY*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
         }
     }
+    // set the size of the chunk info
+    chunks[chunk_id].m_ChunkInfo.size = chunks[chunk_id].m_Spheres.size();
     // add total number of chunks
     totalNumOfSpheres += chunks[chunk_id].m_Spheres.size();
 }

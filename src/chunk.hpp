@@ -11,16 +11,15 @@
 #include "math/FastNoiseLite.hpp"
 
 // chunks will be square with this value 32*32
-#define CHUNK_SIZE 16
+#define CHUNK_SIZE 32
 // the deepness of indiviual quad 16*16 * 4
 #define CHUNK_QUAD_DEEPNESS 1
 
-struct ChunkPos { // 8 bytes
-    int32_t x;
-    int32_t z;
-
-    ChunkPos() = default;
-    ChunkPos(int32_t _x, int32_t _z) : x(_x), z(_z) {}
+struct ChunkInfo { // 4 + 4 + 8 + 24 = 40 bytes
+    uint32_t offset;
+    uint32_t size;
+    glm::ivec2 pos;
+    BoundBox boundBox; // 24 bytes
 };
 
 // uint32 data order is yVal + zOffset + xOffset
@@ -32,11 +31,11 @@ struct Sphere { // 4 bytes
     Sphere () = default;
     Sphere (uint8_t x, int16_t y, uint8_t z) : xOffset(x), yVal(y), zOffset(z) {}
 
-    inline glm::vec3 getPosition(const ChunkPos &chunkPos, float radius){
+    inline glm::vec3 getPosition(const glm::ivec2 chunkPos, float radius){
         glm::vec3 result;
         result.x = (chunkPos.x + xOffset) * radius;
         result.y = yVal * radius;
-        result.z = (chunkPos.z + zOffset) * radius;
+        result.z = (chunkPos.y + zOffset) * radius;
         return result;
     } 
 };
@@ -53,10 +52,7 @@ public:
 public:
     //std::array<std::vector<Sphere>, CHUNK_SIZE*CHUNK_SIZE> m_Grid;
     std::vector<Sphere> m_Spheres;
-    BoundBox m_BoundBox;
-    ChunkPos m_Position;
-
-    uint32_t m_StartIndex;
+    ChunkInfo m_ChunkInfo;
 };
 
 class ChunkHolder {

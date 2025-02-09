@@ -20,15 +20,11 @@ void Texture::SetTexParametrI(GLenum pname, GLint param) {
     glTexParameteri(m_GLType, pname, param);
 }
 void Texture::AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data){
-    if (!m_Allocated){
-        m_Width = width;
-        m_Height = height;
-        m_Format = internalFormat;
-        glBindTexture(m_GLType, m_TextureID);
-        glTexImage2D(m_GLType, level, internalFormat, width, height, 0, format, type, data);
-    } else {
-        printf("[ERROR]: The texture already allocated. New allocation is not permitted!\n");
-    }
+    m_Width = width;
+    m_Height = height;
+    m_Format = internalFormat;
+    glBindTexture(m_GLType, m_TextureID);
+    glTexImage2D(m_GLType, level, internalFormat, width, height, 0, format, type, data);
 }
 void Texture::LoadFromFile(const char* path){
     if (!m_Allocated){
