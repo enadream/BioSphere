@@ -16,15 +16,34 @@ Texture::Texture(Texture &&other) noexcept :
     // falsify texture ID
     other.m_TextureID = 0;
 }
+void Texture::Generate(GLenum gl_type, TextureType tex_type){
+    glGenTextures(1, &m_TextureID);
+    m_GLType = gl_type;
+    m_Type = tex_type;
+}
+void Texture::Free() {
+    glDeleteTextures(1, &m_TextureID);
+    m_TextureID = 0;
+    m_Allocated = false;
+    m_Width = 0;
+    m_Height = 0;
+}
 void Texture::SetTexParametrI(GLenum pname, GLint param) {
     glTexParameteri(m_GLType, pname, param);
 }
-void Texture::AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data){
+void Texture::GLTexImage2D(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data){
     m_Width = width;
     m_Height = height;
     m_Format = internalFormat;
     glBindTexture(m_GLType, m_TextureID);
     glTexImage2D(m_GLType, level, internalFormat, width, height, 0, format, type, data);
+}
+void Texture::GLTexStorage2D(GLint level, GLint internalFormat, int32_t width, int32_t height){
+    m_Width = width;
+    m_Height = height;
+    m_Format = internalFormat;
+    glBindTexture(m_GLType, m_TextureID);
+    glTexStorage2D(m_GLType, level, internalFormat, width, height);
 }
 void Texture::LoadFromFile(const char* path){
     if (!m_Allocated){

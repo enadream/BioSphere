@@ -65,7 +65,7 @@ bool ShaderProgram::LinkShaders() {
     int32_t result;
     glGetProgramiv(m_ProgramID, GL_VALIDATE_STATUS, &result);
     if (result == GL_FALSE){
-        int32_t size;
+        int32_t size = 0;
         glGetProgramiv(m_ProgramID, GL_INFO_LOG_LENGTH, &size);
         char * message = (char*)alloca(size * sizeof(char));
         glGetProgramInfoLog(m_ProgramID, size, &size, message);

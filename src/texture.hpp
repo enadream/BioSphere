@@ -34,8 +34,11 @@ public: // functions
     // always bind before using this function
     void SetTexParametrI(GLenum pname, GLint param);
     // automatically binds, reallocation allowed
-    void AllocateTexture(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data);
+    void GLTexImage2D(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data);
+    void GLTexStorage2D(GLint level, GLint internalFormat, int32_t width, int32_t height);
 
+    void Free();
+    void Generate(GLenum gl_type, TextureType tex_type);
     inline void Bind() const {
         glBindTexture(m_GLType, m_TextureID);
     }

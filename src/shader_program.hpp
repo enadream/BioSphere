@@ -92,12 +92,28 @@ inline void SetUniform1f(const int32_t &uniform_id, float x){
     glUniform1f(uniform_id, x);
 }
 
+
+inline void SetUniform1ui(const string& uniform_name, uint32_t x){
+    int32_t id = GetUniformID(uniform_name);
+    glUniform1ui(id, x);
+}
+inline void SetUniform1ui(const int32_t &uniform_id, uint32_t x){
+    glUniform1ui(uniform_id, x);
+}
+
 inline void SetUniform1i(const string& uniform_name, int32_t x){
     int32_t id = GetUniformID(uniform_name);
     glUniform1i(id, x);
 }
 inline void SetUniform1i(const int32_t &uniform_id, int32_t x){
     glUniform1i(uniform_id, x);
+}
+inline void SetUniform2iv(const string& uniform_name, glm::ivec2 vec2d){
+    int32_t id = GetUniformID(uniform_name);
+    glUniform2iv(id, 1, glm::value_ptr(vec2d));
+}
+inline void SetUniform2iv(const int32_t &uniform_id, glm::ivec2 vec2d){
+    glUniform2iv(uniform_id, 1, glm::value_ptr(vec2d));
 }
 
 inline void SetUniform3fv(const string& uniform_name, float x, float y, float z){

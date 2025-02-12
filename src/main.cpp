@@ -200,7 +200,7 @@ int main(){
     // computeText.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     // computeText.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // computeText.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    // computeText.AllocateTexture(0, GL_RGBA32F, 500, 500, GL_RGBA, GL_FLOAT, NULL);
+    // computeText.GLTexImage2D(0, GL_RGBA32F, 500, 500, GL_RGBA, GL_FLOAT, NULL);
     // computeText.BindImageTexture(0, 0, GL_FALSE, 0, GL_READ_WRITE);
     // // quad to render compute output
     // ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
@@ -236,7 +236,7 @@ int main(){
     glBindBufferBase(packedSpheres.GetType(), 1, packedSpheres.GetID());
     ////////////////////// Output Buffer Binding 2
     Buffer visibleSphereSSBO(GL_SHADER_STORAGE_BUFFER);
-    visibleSphereSSBO.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*sizeof(glm::ivec3), nullptr, chunkHolder.chunks.size(), GL_DYNAMIC_DRAW);
+    visibleSphereSSBO.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*(16), nullptr, chunkHolder.chunks.size(), GL_DYNAMIC_DRAW);
     glBindBufferBase(visibleSphereSSBO.GetType(), 2, visibleSphereSSBO.GetID());
     ////////////////////// Atomic Counter Buffer Binding 3
     uint32_t visibleSphereCounter = 0;
@@ -244,57 +244,71 @@ int main(){
     atomicCounter.GenBuffer(sizeof(uint32_t), &visibleSphereCounter, 1, GL_DYNAMIC_DRAW);
     glBindBufferBase(atomicCounter.GetType(), 3, atomicCounter.GetID());
 
+    // rasterizer compute shader
+    ShaderProgram rastProgram;
+    rastProgram.AttachShader(GL_COMPUTE_SHADER, "res/shaders/rasterizer.comp");
+    rastProgram.LinkShaders();
 
-    // create instanced arrays
-    VertexBuffer sphereVBO;
-    sphereVBO.GenVertexBuffer(sizeof(sphereVertices), sphereVertices, 4, GL_STATIC_DRAW);
+    // rasterizer texture
+    Texture rastTexture(GL_TEXTURE_2D, TextureType::DEPTH);
+    rastTexture.GLTexStorage2D(1, GL_R32I, cam.GetWidth(), cam.GetHeight());
+    rastTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    rastTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    rastTexture.Unbind();
+    glBindImageTexture(4, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
 
-    uint32_t sphereVAO;
-    glGenVertexArrays(1, &sphereVAO);
-    glBindVertexArray(sphereVAO);
-    sphereVBO.Bind();
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    // bind ssbo as array buffer
-    glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
-    glEnableVertexAttribArray(1);
-    glVertexAttribIPointer(1, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
-    glVertexAttribDivisor(1, 1);
-    sphereVBO.Unbind();
-    glBindVertexArray(0);
+    // // create instanced arrays
+    // VertexBuffer sphereVBO;
+    // sphereVBO.GenVertexBuffer(sizeof(sphereVertices), sphereVertices, 4, GL_STATIC_DRAW);
 
-    // generate z texture
-    Texture zTexture(GL_TEXTURE_2D, TextureType::DEPTH);
-    zTexture.AllocateTexture(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    zTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    zTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    zTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    zTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    zTexture.Unbind();
+    // uint32_t sphereVAO;
+    // glGenVertexArrays(1, &sphereVAO);
+    // glBindVertexArray(sphereVAO);
+    // sphereVBO.Bind();
+    // glEnableVertexAttribArray(0);
+    // glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    // // bind ssbo as array buffer
+    // glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
+    // glEnableVertexAttribArray(1);
+    // glVertexAttribIPointer(1, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
+    // glVertexAttribDivisor(1, 1);
+    // sphereVBO.Unbind();
+    // glBindVertexArray(0);
 
-    // generate frame buffer for hi-zmap
-    FrameBuffer zFrameBuffer(GL_FRAMEBUFFER);
-    zFrameBuffer.Bind();
-    glFramebufferTexture2D(zFrameBuffer.GetType(), GL_DEPTH_ATTACHMENT, zTexture.GetType(), zTexture.GetID(), 0);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        printf("[ERROR]: There is an error in glFrameBuffer\n");
-    }
-    zFrameBuffer.Unbind();
+    // // generate z texture
+    // Texture zTexture(GL_TEXTURE_2D, TextureType::DEPTH);
+    // zTexture.GLTexImage2D(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    // zTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // zTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // zTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    // zTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // zTexture.Unbind();
 
-    // zBuffer shader
-    ShaderProgram zBufferShader("res/shaders/hi_z_map.vert", "res/shaders/hi_z_map.frag", "res/shaders/hi_z_map.geom");
-    zBufferShader.SetUniform1f("u_Radius", sphereRadius);
-    // zbuffer VAO
-    uint32_t zBufferVAO;
-    glGenVertexArrays(1, &zBufferVAO);
-    glBindVertexArray(zBufferVAO);
-    // bind ssbo as array buffer
-    glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
-    glEnableVertexAttribArray(0);
-    glVertexAttribIPointer(0, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
-    // unbind
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    // // generate frame buffer for hi-zmap
+    // FrameBuffer zFrameBuffer(GL_FRAMEBUFFER);
+    // zFrameBuffer.Bind();
+    // glFramebufferTexture2D(zFrameBuffer.GetType(), GL_DEPTH_ATTACHMENT, zTexture.GetType(), zTexture.GetID(), 0);
+    // if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    //     printf("[ERROR]: There is an error in glFrameBuffer\n");
+    // }
+    // zFrameBuffer.Unbind();
+
+    // // zBuffer shader
+    // ShaderProgram zBufferShader("res/shaders/hi_z_map.vert", "res/shaders/hi_z_map.frag", "res/shaders/hi_z_map.geom");
+    // zBufferShader.SetUniform1f("u_Radius", sphereRadius);
+    // // zbuffer VAO
+    // uint32_t zBufferVAO;
+    // glGenVertexArrays(1, &zBufferVAO);
+    // glBindVertexArray(zBufferVAO);
+    // // bind ssbo as array buffer
+    // glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
+    // glEnableVertexAttribArray(0);
+    // glVertexAttribIPointer(0, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
+    // // unbind
+    // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    // glBindVertexArray(0);
 
     // rendering z buffer for testing
     ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
@@ -348,7 +362,6 @@ int main(){
         computeFrustum.Use();
         computeFrustum.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
         uint32_t numOfWorkGroups = (chunkHolder.chunks.size()+63) / 64; // for a local size of 64
-        
         glDispatchCompute(numOfWorkGroups, 1, 1);
         
         // Ensure writes are visible to subsequent rendering.
@@ -356,22 +369,60 @@ int main(){
         // read total number of visible objects
         atomicCounter.Bind();
         glGetBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
-        
-        // set uniform data of sphere shader
-        sphereShader.Use();
-        sphereShader.SetUniformMatrix4fv("u_ProjView", projView);
-        sphereShader.SetUniform3fv("u_CameraPos", cam.GetPosition());
-        sphereShader.SetUniform1f("u_Radius", sphereRadius);
-        // draw visible spheres
-        glBindVertexArray(sphereVAO);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, visibleSphereCounter);
+
+
+        if (rastTexture.GetWidth() != cam.GetWidth()){
+            // free old space
+            rastTexture.Free();
+            rastTexture.Generate(GL_TEXTURE_2D, TextureType::DEPTH);
+            // reallocate
+            rastTexture.GLTexStorage2D(1, GL_R32I, cam.GetWidth(), cam.GetHeight());
+            rastTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            rastTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindImageTexture(4, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
+        }
+        // clear the texture
+        int32_t clearVal = glm::floatBitsToInt(1.0f);
+        glClearTexImage(rastTexture.GetID(), 0, GL_RED_INTEGER, GL_INT, &clearVal);
+
+        rastProgram.Use();
+        rastProgram.SetUniformMatrix4fv("u_ProjView", projView);
+        rastProgram.SetUniformMatrix4fv("u_View", view);
+        rastProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+        float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
+        rastProgram.SetUniform1f("u_FocalLength", focalLenght);
+        rastProgram.SetUniform1f("u_Near", cam.GetNear());
+        rastProgram.SetUniform1f("u_Far", cam.GetFar());
+        rastProgram.SetUniform1ui("u_TotalNumOfSpheres", visibleSphereCounter);
+
+        numOfWorkGroups = (visibleSphereCounter+63) / 64; // for a local size of 64
+        glDispatchCompute(numOfWorkGroups, 1, 1);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // Ensure writes are visible
+
+        // test draw
+        simpleQuadPr.Use();
+        simpleQuadPr.SetUniform1i("u_Tex", 0);
+        rastTexture.BindTo(0);
+        simpleQuadVA.Bind();
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
+
+        // // set uniform data of sphere shader
+        // sphereShader.Use();
+        // sphereShader.SetUniformMatrix4fv("u_ProjView", projView);
+        // sphereShader.SetUniform3fv("u_CameraPos", cam.GetPosition());
+        // sphereShader.SetUniform1f("u_Radius", sphereRadius);
+        // // draw visible spheres
+        // glBindVertexArray(sphereVAO);
+        // glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, visibleSphereCounter);
 
         // // bind to depth renderer
         // zFrameBuffer.Bind();
         // // check texture and screen size
         // if (zTexture.GetWidth() != cam.GetWidth()){
         //     // reallocate
-        //     zTexture.AllocateTexture(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        //     zTexture.GLTexImage2D(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
         // }
         // // clear old depth buffer
         // glClear(GL_DEPTH_BUFFER_BIT);
@@ -384,12 +435,7 @@ int main(){
         // glDrawArrays(GL_POINTS, 0, visibleSphereCounter);
         // zFrameBuffer.Unbind();
 
-        // // test draw
-        // simpleQuadPr.Use();
-        // simpleQuadPr.SetUniform1i("u_Tex", 0);
-        // zTexture.BindTo(0);
-        // simpleQuadVA.Bind();
-        // glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
+
 
         // generate mipmaps
         // accomplish h-z cull
@@ -605,6 +651,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset){
 
 void frame_buffer_size_callback(GLFWwindow* window, int width, int height){
     if (width == 0 || height == 0) {
+        glViewport(0, 0, 1, 1);
+        m_MainCamera->SetWidthHeight(1, 1);
         // Window is minimized; skip rendering
         return;
     }

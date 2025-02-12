@@ -8,19 +8,21 @@ struct Sphere {
 };
 
 // Binding point 0: SSBO with sphere data (vec4: xyz = center, w = radius)
-layout(std430, binding = 0) buffer Spheres {
+layout(std430, binding = 2) buffer VisibleSphereBuffer {
     Sphere spheres[];
 };
 
 // Output image declared as an integer image for atomic operations.
 // (The texture format should be set to a 32-bit integer format, e.g. GL_R32I.)
-layout(r32i, binding = 1) uniform iimage2D outImage;
+layout(r32i, binding = 4) uniform iimage2D outImage;
 
 // uniforms
 uniform mat4 u_ProjView;      // Combined view-projection matrix
 uniform mat4 u_View;          // View matrix (for computing view-space depth).
 uniform ivec2 u_ScreenSize;    // [width, height] in pixels
 uniform float u_FocalLength;
+uniform float u_Near;         // Near plane distance.
+uniform float u_Far;          // Far plane distance.
 uniform uint u_TotalNumOfSpheres;
 
 void main() {
@@ -51,4 +53,28 @@ void main() {
     float screenRadius = (radiusWorld * u_FocalLength) / depth;
 
     // 4. Determine the square region (pixel bounds) to update.
+    // The square is centered at screenCenter and has a half-size = screenRadius.
+    ivec2 minCoord = ivec2(floor(screenCenter - vec2(screenRadius)));
+    ivec2 maxCoord = ivec2(ceil(screenCenter + vec2(screenRadius)));
+    // Clamp to valid screen coordinates.
+    minCoord = clamp(minCoord, ivec2(0), ivec2(u_ScreenSize.x-1, u_ScreenSize.y-1));
+    maxCoord = clamp(maxCoord, ivec2(0), ivec2(u_ScreenSize.x-1, u_ScreenSize.y-1));
+
+    // 5. Compute the paint value.
+    // We want a value in [0,1] where a closer sphere (small depth) gives a lower value.
+    // A simple mapping is:
+    float paintValue = clamp((depth - u_Near) / (u_Far - u_Near), 0.0, 1.0);
+    // Here, t is 0 for objects at u_near and 1 for objects at u_far.
+
+    // 6. Convert the paint value to an integer via bit-level conversion.
+    int paintInt = floatBitsToInt(paintValue);
+
+    // 7. Fill the square region in the output image.
+    // Use imageAtomicMin so that we only update a pixel if the new value is smaller
+    // (i.e. the sphere is closer) than the existing value.
+    for (int y = minCoord.y; y <= maxCoord.y; ++y) {
+        for (int x = minCoord.x; x <= maxCoord.x; ++x) {
+            imageAtomicMin(outImage, ivec2(x, y), paintInt);
+        }
+    }
 }
