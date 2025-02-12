@@ -43,16 +43,14 @@ struct SpotLight {
 out vec4 FragColor;
 
 // inputs
-in vec3 v_FragPos;
 in vec3 v_Center;
 in float v_DistCenterToCam;
+in vec3 v_FragPos;
 in float v_ScaledRadius;
-//in vec3 v_Color;
+in float g_Radius;
 
 // uniforms
 uniform float u_FarDist;
-uniform float u_Radius;
-
 uniform vec3 u_CameraPos;
 uniform vec3 u_Color;
 
@@ -66,8 +64,6 @@ uniform samplerCube u_Texture;
 vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir);
-
-const float MaxHeight = 40.0f;
 
 void main(){
     float dist2Center = length(v_FragPos - v_Center);
@@ -83,7 +79,7 @@ void main(){
     float xSquare = dist2Center * dist2Center;
     float hVal = (v_DistCenterToCam * dist2Center)/dVal;
     float hSquare = hVal * hVal;
-    float rSquare = u_Radius * u_Radius;
+    float rSquare = g_Radius * g_Radius;
     float yVal = sqrt(abs(rSquare - hSquare)) + sqrt(abs(xSquare - hSquare));
 
     gl_FragDepth = (dVal-yVal) / u_FarDist;
@@ -93,19 +89,13 @@ void main(){
     vec3 fragNormal = normalize(fragRealPos - v_Center);
 
     vec3 resultColor = CalcDirectLight(u_DirLight, fragNormal, viewDir, fragRealPos);
-    //float val = (v_FragPos.y + MaxHeight/2.0f) / MaxHeight;
-    //float val = sqrt(1 - (dist2Center/v_ScaledRadius));
 
-    FragColor = vec4(resultColor, 1.0);
+    FragColor = vec4(1.0,1.0,1.0, 1.0);
 }
 
 vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos){
     vec3 result;
     float weight;
-
-    // float whiteVal = (fragRealPos.y + MaxHeight/2.0f) / MaxHeight;
-    // float greenVal = 1 - ((fragRealPos.y + MaxHeight/2.0f) / MaxHeight);
-    // float blueVal = whiteVal;
 
     vec3 color;
 

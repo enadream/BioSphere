@@ -21,8 +21,9 @@ public: // functions
 
     void GenVertexBuffer(uint32_t size, const void*data, uint32_t vert_amount, GLenum usage = GL_STATIC_DRAW);
     void GenIndexBuffer(uint32_t size, const void*data, IndexType data_type, GLenum usage = GL_STATIC_DRAW);
-    void InsertLayout(uint32_t index, uint32_t count, GLenum gl_type, GLboolean normalize, uint32_t row_size, uint32_t offset);
-
+    void InsertLayout(uint32_t index, uint32_t count, GLenum gl_type, GLboolean normalize, uint32_t stride, uint32_t offset);
+    void InsertLayoutI(uint32_t index, uint32_t count, GLenum gl_type, uint32_t stride, uint32_t offset);
+    
     inline void Bind() const {
         glBindVertexArray(m_VAO);
     }
