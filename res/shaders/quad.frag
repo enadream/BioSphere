@@ -11,5 +11,4 @@ void main() {
     float value = intBitsToFloat(rawValue);
 
     FragColor = vec4(value, value, value, 1.0);
-    gl_FragDepth = 0.0;
 }

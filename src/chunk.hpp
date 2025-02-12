@@ -23,21 +23,13 @@ struct ChunkInfo { // 4 + 4 + 8 + 24 = 40 bytes
 };
 
 // uint32 data order is yVal + zOffset + xOffset
-struct Sphere { // 4 bytes
-    uint8_t xOffset;
-    uint8_t zOffset;
-    int16_t yVal;
+struct Sphere { // 16 bytes
+    glm::ivec3 position;
+    float radius;
 
     Sphere () = default;
-    Sphere (uint8_t x, int16_t y, uint8_t z) : xOffset(x), yVal(y), zOffset(z) {}
+    Sphere (int32_t x, int32_t y, int32_t z, float rad) : position(x, y, z), radius(rad) {}
 
-    inline glm::vec3 getPosition(const glm::ivec2 chunkPos, float radius){
-        glm::vec3 result;
-        result.x = (chunkPos.x + xOffset) * radius;
-        result.y = yVal * radius;
-        result.z = (chunkPos.y + zOffset) * radius;
-        return result;
-    } 
 };
 
 class Chunk {
@@ -57,32 +49,34 @@ public:
 
 class ChunkHolder {
 public: // functions
-    ChunkHolder(uint32_t chunk_am, float sphere_radius);
+    ChunkHolder(int32_t width, float sphere_radius);
     
-    inline uint32_t GetVertChunkAmount() {
-        return chunkAmount;
+    inline uint32_t GetWidth() {
+        return m_Width;
     }
-    inline uint32_t GetTotalChunkAmount() {
-        return chunkAmount * chunkAmount;
-    }
-    inline uint32_t GetTotalNumOfSpheres(){
-        return totalNumOfSpheres;
-    }
-    inline float GetSphereRadius(){
-        return sphereRadius;
-    }
-    inline Chunk& GetChunk(uint32_t x_off, uint32_t z_off){
-        return chunks[z_off*chunkAmount + x_off];
-    }
+    // inline uint32_t GetVertChunkAmount() {
+    //     return chunkAmount;
+    // }
+    // inline uint32_t GetTotalChunkAmount() {
+    //     return chunkAmount * chunkAmount;
+    // }
+    // inline uint32_t GetTotalNumOfSpheres(){
+    //     return totalNumOfSpheres;
+    // }
+    // inline float GetSphereRadius(){
+    //     return sphereRadius;
+    // }
+    // inline Chunk& GetChunk(uint32_t x_off, uint32_t z_off){
+    //     return chunks[z_off*chunkAmount + x_off];
+    // }
 
 public: // variables
-    std::vector<Chunk> chunks;
-    
+    //std::vector<Chunk> chunks;
+    std::vector<Sphere> spheres;
 
 private: // variables
     std::vector<std::vector<int16_t>> heightMap; // 2D random Map Coords
-    uint32_t totalNumOfSpheres;
-    uint32_t chunkAmount; //  total chunk size is chunkSize * chunkSize
+    uint32_t m_Width; //  total chunk size is chunkSize * chunkSize
     float sphereRadius;
 
     // noise variables
@@ -93,8 +87,10 @@ private: // variables
     bool noise_initialized = false;
 
 private: // functions
-    void generateChunks();
-    void generateChunk(const int32_t z_off, const int32_t x_off, uint32_t chunk_id);
+    void generateSpheres();
+    void generateSphere(const int32_t z_pos, const int32_t x_pos);
+    //void generateChunks();
+    //void generateChunk(const int32_t z_off, const int32_t x_off, uint32_t chunk_id);
 
     void generateHeightMap();
     void initNoise();

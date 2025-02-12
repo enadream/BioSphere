@@ -1,29 +1,32 @@
 #version 460 core
 // Define a work group size. Adjust the local size as needed.
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 512, local_size_y = 1, local_size_z = 1) in;
 
-struct Sphere {
+struct Sphere { // 16 bytes
     ivec3 pos;
     float radius;
 };
 
 // Binding point 0: SSBO with sphere data (vec4: xyz = center, w = radius)
-layout(std430, binding = 2) buffer VisibleSphereBuffer {
+layout(std430, binding = 0) readonly buffer VisibleSphereBuffer {
     Sphere spheres[];
 };
 
 // Output image declared as an integer image for atomic operations.
 // (The texture format should be set to a 32-bit integer format, e.g. GL_R32I.)
-layout(r32i, binding = 4) uniform iimage2D outImage;
+layout(r32i, binding = 0) uniform iimage2D outImage;
 
 // uniforms
 uniform mat4 u_ProjView;      // Combined view-projection matrix
 uniform mat4 u_View;          // View matrix (for computing view-space depth).
+uniform vec4 u_frustumPlanes[6];
 uniform ivec2 u_ScreenSize;    // [width, height] in pixels
 uniform float u_FocalLength;
 uniform float u_Near;         // Near plane distance.
 uniform float u_Far;          // Far plane distance.
 uniform uint u_TotalNumOfSpheres;
+
+bool IsSphereVisible(vec3 pos, float radius);
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
@@ -33,8 +36,13 @@ void main() {
 
     // 1. Retrieve sphere data.
     Sphere targetSphere = spheres[index];
+
     float radiusWorld = targetSphere.radius;
     vec3 centerWorld = radiusWorld * targetSphere.pos;
+    // check frustum culling
+    if (!IsSphereVisible(centerWorld, radiusWorld)){
+        return;
+    }
 
     // 2. Compute the screen-space center.
     // Transform the sphere center to clip space.
@@ -48,6 +56,9 @@ void main() {
     vec3 viewCenter = (u_View * vec4(centerWorld, 1.0)).xyz;
     // Assume the camera looks down -Z so we take depth as -viewCenter.z.
     float depth = -viewCenter.z;  // depth > 0 if in front of the camera.
+    if (depth < 1.0){
+        return;
+    }
 
     // The sphere's projected radius in screen space (in pixels).
     float screenRadius = (radiusWorld * u_FocalLength) / depth;
@@ -74,7 +85,25 @@ void main() {
     // (i.e. the sphere is closer) than the existing value.
     for (int y = minCoord.y; y <= maxCoord.y; ++y) {
         for (int x = minCoord.x; x <= maxCoord.x; ++x) {
+            float distance = length(vec2(x,y) - screenCenter);
+            if (distance > screenRadius)
+                continue;
             imageAtomicMin(outImage, ivec2(x, y), paintInt);
         }
     }
+}
+
+
+bool IsSphereVisible(vec3 pos, float radius){
+    for (int i = 0; i < 6; i++){
+        // Calculate signed distance from sphere center to the plane
+        float dist = dot(pos, u_frustumPlanes[i].xyz) + u_frustumPlanes[i].w;
+
+        // If the sphere is entirely behind the plane, it's not visible
+        if (dist < -radius) {
+            return false;
+        }
+    }
+
+    return true;
 }

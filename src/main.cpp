@@ -85,8 +85,8 @@ int main(){
     glViewport(0, 0, 800, 600);
     glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
     // Depth testing
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+    glDisable(GL_DEPTH_TEST);
+    //glDepthFunc(GL_LESS);
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     //glEnable(GL_CULL_FACE);
     // blending
@@ -99,10 +99,10 @@ int main(){
 
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkHolder chunkHolder(100, sphereRadius); // total amount of chunk is x*x
-    cam.SetPositionX(0.05 + chunkHolder.GetVertChunkAmount()*CHUNK_SIZE*sphereRadius / 2.0f);
+    ChunkHolder chunkHolder(3200, sphereRadius); // total amount of chunk is x*x
+    cam.SetPositionX(0.05 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
     cam.SetPositionY(150.0f);
-    cam.SetPositionZ(0.07 + chunkHolder.GetVertChunkAmount()*CHUNK_SIZE*sphereRadius / 2.0f);
+    cam.SetPositionZ(0.07 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
 
     float sphereVertices[] = {
         -1, -1,
@@ -111,7 +111,7 @@ int main(){
         1, 1
     };
 
-    printf("Total number of spheres: %u\n", chunkHolder.GetTotalNumOfSpheres());
+    printf("Total number of spheres: %u\n", chunkHolder.spheres.size());
 
     // create command array
     //std::vector<DrawArraysIndirectCommand> drawCommands;
@@ -209,45 +209,40 @@ int main(){
     // simpleQuadVA.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), 0);
     // simpleQuadVA.InsertLayout(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), 3*sizeof(float));
 
-    // frustum culling shader
-    ShaderProgram computeFrustum;
-    computeFrustum.AttachShader(GL_COMPUTE_SHADER, "res/shaders/frustum_culler.comp");
-    computeFrustum.LinkShaders();
-    ////////////////////// Chunks Binding 0
-    Buffer chunkSSBO(GL_SHADER_STORAGE_BUFFER);
-    chunkSSBO.GenBuffer(chunkHolder.chunks.size()*sizeof(ChunkInfo), nullptr, chunkHolder.chunks.size(), GL_STATIC_DRAW);
-    chunkSSBO.Bind();
-    for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-        glBufferSubData(chunkSSBO.GetType(), i*sizeof(ChunkInfo), sizeof(ChunkInfo), &(chunkHolder.chunks[i].m_ChunkInfo));
-    }
-    chunkSSBO.Unbind();
-    glBindBufferBase(chunkSSBO.GetType(), 0, chunkSSBO.GetID());
-    ////////////////////// Packed Spheres Binding 1
-    Buffer packedSpheres(GL_SHADER_STORAGE_BUFFER);
-    packedSpheres.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*sizeof(Sphere), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_STATIC_DRAW);
-    packedSpheres.Bind();
-    uint32_t sphereOffsetBytes = 0;
-    for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-        glBufferSubData(packedSpheres.GetType(), sphereOffsetBytes, chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere),
-            chunkHolder.chunks[i].m_Spheres.data());
-        sphereOffsetBytes += chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere);
-    }
-    packedSpheres.Unbind();
-    glBindBufferBase(packedSpheres.GetType(), 1, packedSpheres.GetID());
-    ////////////////////// Output Buffer Binding 2
-    Buffer visibleSphereSSBO(GL_SHADER_STORAGE_BUFFER);
-    visibleSphereSSBO.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*(16), nullptr, chunkHolder.chunks.size(), GL_DYNAMIC_DRAW);
-    glBindBufferBase(visibleSphereSSBO.GetType(), 2, visibleSphereSSBO.GetID());
-    ////////////////////// Atomic Counter Buffer Binding 3
-    uint32_t visibleSphereCounter = 0;
-    Buffer atomicCounter(GL_ATOMIC_COUNTER_BUFFER);
-    atomicCounter.GenBuffer(sizeof(uint32_t), &visibleSphereCounter, 1, GL_DYNAMIC_DRAW);
-    glBindBufferBase(atomicCounter.GetType(), 3, atomicCounter.GetID());
-
-    // rasterizer compute shader
-    ShaderProgram rastProgram;
-    rastProgram.AttachShader(GL_COMPUTE_SHADER, "res/shaders/rasterizer.comp");
-    rastProgram.LinkShaders();
+    // // frustum culling shader
+    // ShaderProgram computeFrustum;
+    // computeFrustum.AttachShader(GL_COMPUTE_SHADER, "res/shaders/frustum_culler.comp");
+    // computeFrustum.LinkShaders();
+    // ////////////////////// Chunks Binding 0
+    // Buffer chunkSSBO(GL_SHADER_STORAGE_BUFFER);
+    // chunkSSBO.GenBuffer(chunkHolder.chunks.size()*sizeof(ChunkInfo), nullptr, chunkHolder.chunks.size(), GL_STATIC_DRAW);
+    // chunkSSBO.Bind();
+    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+    //     glBufferSubData(chunkSSBO.GetType(), i*sizeof(ChunkInfo), sizeof(ChunkInfo), &(chunkHolder.chunks[i].m_ChunkInfo));
+    // }
+    // chunkSSBO.Unbind();
+    // glBindBufferBase(chunkSSBO.GetType(), 0, chunkSSBO.GetID());
+    // ////////////////////// Packed Spheres Binding 1
+    // Buffer packedSpheres(GL_SHADER_STORAGE_BUFFER);
+    // packedSpheres.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*sizeof(Sphere), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_STATIC_DRAW);
+    // packedSpheres.Bind();
+    // uint32_t sphereOffsetBytes = 0;
+    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+    //     glBufferSubData(packedSpheres.GetType(), sphereOffsetBytes, chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere),
+    //         chunkHolder.chunks[i].m_Spheres.data());
+    //     sphereOffsetBytes += chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere);
+    // }
+    // packedSpheres.Unbind();
+    // glBindBufferBase(packedSpheres.GetType(), 1, packedSpheres.GetID());
+    // ////////////////////// Output Buffer Binding 2
+    // Buffer visibleSphereSSBO(GL_SHADER_STORAGE_BUFFER);
+    // visibleSphereSSBO.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*(16), nullptr, chunkHolder.chunks.size(), GL_DYNAMIC_DRAW);
+    // glBindBufferBase(visibleSphereSSBO.GetType(), 2, visibleSphereSSBO.GetID());
+    // ////////////////////// Atomic Counter Buffer Binding 3
+    // uint32_t visibleSphereCounter = 0;
+    // Buffer atomicCounter(GL_ATOMIC_COUNTER_BUFFER);
+    // atomicCounter.GenBuffer(sizeof(uint32_t), &visibleSphereCounter, 1, GL_DYNAMIC_DRAW);
+    // glBindBufferBase(atomicCounter.GetType(), 3, atomicCounter.GetID());
 
     // rasterizer texture
     Texture rastTexture(GL_TEXTURE_2D, TextureType::DEPTH);
@@ -256,8 +251,17 @@ int main(){
     rastTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindImageTexture(0, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
     rastTexture.Unbind();
-    glBindImageTexture(4, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
+
+    Buffer spheresSSBO(GL_SHADER_STORAGE_BUFFER);
+    spheresSSBO.GenBuffer(chunkHolder.spheres.size()*(sizeof(Sphere)), chunkHolder.spheres.data(), chunkHolder.spheres.size(), GL_DYNAMIC_DRAW);
+    glBindBufferBase(spheresSSBO.GetType(), 0, spheresSSBO.GetID());
+
+    // rasterizer compute shader
+    ShaderProgram rastProgram;
+    rastProgram.AttachShader(GL_COMPUTE_SHADER, "res/shaders/rasterizer.comp");
+    rastProgram.LinkShaders();
 
     // // create instanced arrays
     // VertexBuffer sphereVBO;
@@ -319,7 +323,7 @@ int main(){
 
     while(!glfwWindowShouldClose(window)){
         // clear buffer
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // delta time calculation
         static float lastFrameTime;
@@ -349,28 +353,28 @@ int main(){
         cam.CalculateFrustum();
 
         
-        // reset counter
-        visibleSphereCounter = 0;
-        atomicCounter.Bind();
-        glBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
+        // // reset counter
+        // visibleSphereCounter = 0;
+        // atomicCounter.Bind();
+        // glBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
         // // set bindings
         // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, chunkSSBO.GetID());
         // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, packedSpheres.GetID());
         // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, visibleSphereSSBO.GetID());
         // glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 3, atomicCounter.GetID());
         // compute shader frustum culling
-        computeFrustum.Use();
-        computeFrustum.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
-        uint32_t numOfWorkGroups = (chunkHolder.chunks.size()+63) / 64; // for a local size of 64
-        glDispatchCompute(numOfWorkGroups, 1, 1);
+        // computeFrustum.Use();
+        // computeFrustum.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
+        // uint32_t numOfWorkGroups = (chunkHolder.chunks.size()+63) / 64; // for a local size of 64
+        // glDispatchCompute(numOfWorkGroups, 1, 1);
         
-        // Ensure writes are visible to subsequent rendering.
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ATOMIC_COUNTER_BARRIER_BIT);
-        // read total number of visible objects
-        atomicCounter.Bind();
-        glGetBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
+        // // Ensure writes are visible to subsequent rendering.
+        // glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ATOMIC_COUNTER_BARRIER_BIT);
+        // // read total number of visible objects
+        // atomicCounter.Bind();
+        // glGetBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
 
-
+        
         if (rastTexture.GetWidth() != cam.GetWidth()){
             // free old space
             rastTexture.Free();
@@ -381,12 +385,13 @@ int main(){
             rastTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             rastTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glBindImageTexture(4, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
+            glBindImageTexture(0, rastTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
         }
+        rastTexture.BindTo(0);
         // clear the texture
         int32_t clearVal = glm::floatBitsToInt(1.0f);
         glClearTexImage(rastTexture.GetID(), 0, GL_RED_INTEGER, GL_INT, &clearVal);
-
+        
         rastProgram.Use();
         rastProgram.SetUniformMatrix4fv("u_ProjView", projView);
         rastProgram.SetUniformMatrix4fv("u_View", view);
@@ -395,19 +400,21 @@ int main(){
         rastProgram.SetUniform1f("u_FocalLength", focalLenght);
         rastProgram.SetUniform1f("u_Near", cam.GetNear());
         rastProgram.SetUniform1f("u_Far", cam.GetFar());
-        rastProgram.SetUniform1ui("u_TotalNumOfSpheres", visibleSphereCounter);
-
-        numOfWorkGroups = (visibleSphereCounter+63) / 64; // for a local size of 64
+        rastProgram.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
+        rastProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
+        
+        
+        uint32_t numOfWorkGroups = (chunkHolder.spheres.size()+511) / 512; // for a local size of 64
         glDispatchCompute(numOfWorkGroups, 1, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // Ensure writes are visible
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
         // test draw
         simpleQuadPr.Use();
         simpleQuadPr.SetUniform1i("u_Tex", 0);
-        rastTexture.BindTo(0);
+        //rastTexture.BindTo(0);
         simpleQuadVA.Bind();
         glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
-
+        
         // // set uniform data of sphere shader
         // sphereShader.Use();
         // sphereShader.SetUniformMatrix4fv("u_ProjView", projView);
