@@ -3,12 +3,12 @@ out vec4 FragColor;
 
 in vec2 TexCoords;
 
-uniform isampler2D u_Tex;
+uniform sampler2D u_Tex;
 
 void main() {
-    int rawValue = texture(u_Tex, TexCoords).r;
-    // Convert the integer bits back to a float.
-    float value = intBitsToFloat(rawValue);
+    vec4 rawValue = texture(u_Tex, TexCoords);
+    // // Convert the integer bits back to a float.
+    // float value = intBitsToFloat(rawValue);
 
-    FragColor = vec4(value, value, value, 1.0);
+    FragColor = rawValue;
 }

@@ -14,7 +14,11 @@ layout(std430, binding = 0) readonly buffer VisibleSphereBuffer {
 
 // Output image declared as an integer image for atomic operations.
 // (The texture format should be set to a 32-bit integer format, e.g. GL_R32I.)
-layout(r32i, binding = 0) uniform iimage2D outImage;
+layout(r32i, binding = 0) uniform iimage2D depthImage;
+
+// The color image (the final output color buffer)
+// Created with a format such as GL_RGBA8.
+layout(rgba8, binding = 1) uniform image2D colorImage;
 
 // uniforms
 uniform mat4 u_ProjView;      // Combined view-projection matrix
@@ -74,21 +78,33 @@ void main() {
     // 5. Compute the paint value.
     // We want a value in [0,1] where a closer sphere (small depth) gives a lower value.
     // A simple mapping is:
-    float paintValue = clamp((depth - u_Near) / (u_Far - u_Near), 0.0, 1.0);
+    float depthValue = clamp((depth - u_Near) / (u_Far - u_Near), 0.0, 1.0);
     // Here, t is 0 for objects at u_near and 1 for objects at u_far.
 
     // 6. Convert the paint value to an integer via bit-level conversion.
-    int paintInt = floatBitsToInt(paintValue);
+    int depthInt = floatBitsToInt(depthValue);
 
     // 7. Fill the square region in the output image.
     // Use imageAtomicMin so that we only update a pixel if the new value is smaller
     // (i.e. the sphere is closer) than the existing value.
     for (int y = minCoord.y; y <= maxCoord.y; ++y) {
         for (int x = minCoord.x; x <= maxCoord.x; ++x) {
-            float distance = length(vec2(x,y) - screenCenter);
-            if (distance > screenRadius)
+            float dist = length(vec2(x,y) - screenCenter);
+            if (dist > screenRadius)
                 continue;
-            imageAtomicMin(outImage, ivec2(x, y), paintInt);
+            
+            //dist = dist / screenRadius; // normalize
+            float distToCenter = sqrt((screenRadius - dist)*(screenRadius + dist));
+            distToCenter /= screenRadius; // normalize
+            //depth -= distToCenter*radiusWorld;
+            
+            
+            //float distToCenter = dist / screenRadius; // when screen radius is zero problem occurs
+            int prevDepthInt = imageAtomicMin(depthImage, ivec2(x, y), depthInt);
+            if (depthInt < prevDepthInt) {
+ 
+                imageStore(colorImage, ivec2(x, y), vec4(distToCenter, distToCenter, distToCenter, 1.0));
+            }
         }
     }
 }
