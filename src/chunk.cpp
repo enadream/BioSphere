@@ -24,7 +24,7 @@ void ChunkHolder::generateSphere(const int32_t x_pos, const int32_t z_pos) {
         {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
 
-    int32_t yValue = heightMap[z_pos][x_pos];
+    int16_t yValue = heightMap[z_pos][x_pos];
 
     if ((x_pos+z_pos)%2 == 1){
         return;
@@ -44,7 +44,7 @@ void ChunkHolder::generateSphere(const int32_t x_pos, const int32_t z_pos) {
         return;
     }
     
-    spheres.emplace_back(x_pos, yValue, z_pos, sphereRadius);
+    spheres.emplace_back(x_pos*sphereRadius, yValue*sphereRadius, z_pos*sphereRadius, sphereRadius);
 
     // check 8 neighbour find the highest difference , [z][x]
     int16_t maxDiff = 0;
@@ -57,7 +57,7 @@ void ChunkHolder::generateSphere(const int32_t x_pos, const int32_t z_pos) {
     // if difference bigger than sphereRadius create more spheres to fill the gap
     for (int16_t f = 2; f <= maxDiff; f += 2){
         int32_t fillY = yValue - f;
-        spheres.emplace_back(x_pos, fillY, z_pos, sphereRadius);
+        spheres.emplace_back(x_pos*sphereRadius, fillY*sphereRadius, z_pos*sphereRadius, sphereRadius);
     }
 }
 

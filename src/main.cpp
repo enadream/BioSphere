@@ -43,8 +43,19 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void print_limits();
 std::string vec3ToString(const glm::vec3& vec);
 
+// // Enable dedicated graphics for NVIDIA:
+// extern "C" 
+// {
+//   __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+// }
+// // Enable dedicated graphics for AMD Radeon:
+// extern "C"
+// {
+//   __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+// }
+
 int main(){
-    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f), 100.0f, 10000.0f, 800, 600);
+    Camera cam(glm::vec3(0.30f, 80.05f, 0.30f), 1.0f, 10000.0f, 800, 600);
     m_MainCamera = &cam;
 
     glfwInit();
@@ -65,7 +76,7 @@ int main(){
     }
     
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(0); // Vsync
+    glfwSwapInterval(1); // Vsync
 
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -83,15 +94,16 @@ int main(){
     //glEnable(GL_FRAMEBUFFER_SRGB); // gamma correction
     // set viewport coordinats first 2 value are lower left corner of the window
     glViewport(0, 0, 800, 600);
-    glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     // Depth testing
-    glDisable(GL_DEPTH_TEST);
-    //glDepthFunc(GL_LESS);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     //glEnable(GL_CULL_FACE);
     // blending
     //glEnable(GL_BLEND);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_PROGRAM_POINT_SIZE);
 
     glfwSetFramebufferSizeCallback(window, frame_buffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -99,240 +111,57 @@ int main(){
 
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkHolder chunkHolder(3200, sphereRadius); // total amount of chunk is x*x
+    ChunkHolder chunkHolder(100 * CHUNK_SIZE, sphereRadius); // total amount of chunk is x*x
     cam.SetPositionX(0.05 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
     cam.SetPositionY(150.0f);
     cam.SetPositionZ(0.07 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
 
-    float sphereVertices[] = {
-        -1, -1,
-        1, -1,
-        -1, 1,
-        1, 1
-    };
-
     printf("Total number of spheres: %u\n", chunkHolder.spheres.size());
 
-    // create command array
-    //std::vector<DrawArraysIndirectCommand> drawCommands;
-    //drawCommands.reserve(chunkHolder.GetTotalChunkAmount());
-    //Buffer commandBuffer(GL_DRAW_INDIRECT_BUFFER);
-    //commandBuffer.GenBuffer(chunkHolder.GetTotalChunkAmount()*sizeof(DrawArraysIndirectCommand), 
-    //    nullptr, chunkHolder.GetTotalChunkAmount(), GL_DYNAMIC_DRAW);
+    // load data to the buffer
+    VertexArray sphereVAO;
+    sphereVAO.GenVertexBuffer(sizeof(Sphere)*chunkHolder.spheres.size(), chunkHolder.spheres.data(), chunkHolder.spheres.size(), GL_STATIC_DRAW);
+    sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(Sphere), 0);
+    
 
-    // Sphere TEXTURES
-    std::vector<string> spFaces = 
-    {
-        "res/textures/dirt_block/grass_cartoon_256.jpg",
-        "res/textures/dirt_block/grass_cartoon_256.jpg",
-        "res/textures/dirt_block/grass_cartoon_256.jpg",
-        "res/textures/dirt_block/grass_cartoon_256.jpg",
-        "res/textures/dirt_block/grass_cartoon_256.jpg",
-        "res/textures/dirt_block/grass_cartoon_256.jpg"
-    };
+    ShaderProgram pointProgram("res/shaders/ellipse.vert", "res/shaders/ellipse.frag");
+    // directional light
+    pointProgram.Use();
+    pointProgram.SetUniform3fv("u_DirLight.direction", glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f)));
+    pointProgram.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
+    pointProgram.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
+    pointProgram.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
 
-    CubeTexture sphereTex;
-    sphereTex.LoadCubeMap(spFaces);
-
-    // SKYBOX
-    VertexArray skybox;
-    skybox.GenVertexBuffer(sizeof(s_skyboxVertices), (void*)s_skyboxVertices, 36, GL_STATIC_DRAW);
-    skybox.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), 0);
-
-    // SKYBOX TEXTURES
-    std::vector<string> faces = 
-    {
-        "res/textures/skybox/right.jpg",
-        "res/textures/skybox/left.jpg",
-        "res/textures/skybox/top.jpg",
-        "res/textures/skybox/bottom.jpg",
-        "res/textures/skybox/front.jpg",
-        "res/textures/skybox/back.jpg"
-    };
-
-    CubeTexture skyboxTex;
-    skyboxTex.LoadCubeMap(faces);
-
-    // light information
-    glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f));
-    glm::vec3 lightColor(1.0f);
-
-    // // shaders
-    // ShaderProgram skyboxShader("res/shaders/skybox.vert", "res/shaders/skybox.frag");
-    // ShaderProgram sphereShader("res/shaders/sphere3.vert", "res/shaders/sphere.frag"); // , "res/shaders/sphere.geom"
-    // sphereShader.Use();
-    // // directional light
-    // sphereShader.SetUniform3fv("u_DirLight.direction", glm::normalize(lightDir));
-    // sphereShader.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
-    // sphereShader.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
-    // sphereShader.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
-
-    // sphereShader.SetUniform3fv("u_PointLight.position",  glm::vec3(0.0f, 5.0f, 0.0f));
-    // sphereShader.SetUniform3fv("u_PointLight.ambient", 0.05f * lightColor);
-    // sphereShader.SetUniform3fv("u_PointLight.diffuse",  0.8f * lightColor);
-    // sphereShader.SetUniform3fv("u_PointLight.specular", lightColor);
-    // sphereShader.SetUniform1f("u_PointLight.constant",  1.0f);
-    // sphereShader.SetUniform1f("u_PointLight.linear",    0.09f);
-    // sphereShader.SetUniform1f("u_PointLight.quadratic", 0.032f);
-
-    // // set sphere information
-    // sphereShader.SetUniform1f("u_Radius", sphereRadius);
-    // sphereShader.SetUniform1f("u_FarDist", cam.GetFar());
 
     std::string title = "BioSphere Evolution : ";
     float frameUpate = 0.0;
     uint32_t frameCount = 0;
 
-    // VertexArray box;
-    // box.GenVertexBuffer(sizeof(s_cubeVertonly), s_cubeVertonly, 36, GL_STATIC_DRAW);
-    // box.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), 0);
-    // ShaderProgram boxShader("res/shaders/bound_box.vert", "res/shaders/bound_box.frag");
+
+    // Sphere TEXTURES
+    std::vector<string> spFaces =
+    {
+        "res/textures/dirt_block/dirt.png",
+        "res/textures/dirt_block/dirt.png",
+        "res/textures/dirt_block/dirt.png",
+        "res/textures/dirt_block/dirt.png",
+        "res/textures/dirt_block/dirt.png",
+        "res/textures/dirt_block/dirt.png"
+    };
+
+    CubeTexture sphereTex;
+    sphereTex.LoadCubeMap(spFaces);
 
     // MATRICES
     glm::mat4 proj, view, projView;
 
-    // ShaderProgram computeShader;
-    // computeShader.AttachShader(GL_COMPUTE_SHADER, "res/shaders/sphere.comp");
-    // computeShader.LinkShaders();
-    // Texture computeText(GL_TEXTURE_2D, TextureType::IMAGE);
-    // computeText.Bind();
-    // computeText.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    // computeText.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // computeText.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // computeText.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    // computeText.GLTexImage2D(0, GL_RGBA32F, 500, 500, GL_RGBA, GL_FLOAT, NULL);
-    // computeText.BindImageTexture(0, 0, GL_FALSE, 0, GL_READ_WRITE);
-    // // quad to render compute output
-    // ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
-    // VertexArray simpleQuadVA;
-    // simpleQuadVA.GenVertexBuffer(sizeof(s_strip_quad), s_strip_quad, 4, GL_STATIC_DRAW);
-    // simpleQuadVA.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), 0);
-    // simpleQuadVA.InsertLayout(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), 3*sizeof(float));
-
-    // // frustum culling shader
-    // ShaderProgram computeFrustum;
-    // computeFrustum.AttachShader(GL_COMPUTE_SHADER, "res/shaders/frustum_culler.comp");
-    // computeFrustum.LinkShaders();
-    // ////////////////////// Chunks Binding 0
-    // Buffer chunkSSBO(GL_SHADER_STORAGE_BUFFER);
-    // chunkSSBO.GenBuffer(chunkHolder.chunks.size()*sizeof(ChunkInfo), nullptr, chunkHolder.chunks.size(), GL_STATIC_DRAW);
-    // chunkSSBO.Bind();
-    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-    //     glBufferSubData(chunkSSBO.GetType(), i*sizeof(ChunkInfo), sizeof(ChunkInfo), &(chunkHolder.chunks[i].m_ChunkInfo));
-    // }
-    // chunkSSBO.Unbind();
-    // glBindBufferBase(chunkSSBO.GetType(), 0, chunkSSBO.GetID());
-    // ////////////////////// Packed Spheres Binding 1
-    // Buffer packedSpheres(GL_SHADER_STORAGE_BUFFER);
-    // packedSpheres.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*sizeof(Sphere), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_STATIC_DRAW);
-    // packedSpheres.Bind();
-    // uint32_t sphereOffsetBytes = 0;
-    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-    //     glBufferSubData(packedSpheres.GetType(), sphereOffsetBytes, chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere),
-    //         chunkHolder.chunks[i].m_Spheres.data());
-    //     sphereOffsetBytes += chunkHolder.chunks[i].m_Spheres.size()*sizeof(Sphere);
-    // }
-    // packedSpheres.Unbind();
-    // glBindBufferBase(packedSpheres.GetType(), 1, packedSpheres.GetID());
-    // ////////////////////// Output Buffer Binding 2
-    // Buffer visibleSphereSSBO(GL_SHADER_STORAGE_BUFFER);
-    // visibleSphereSSBO.GenBuffer(chunkHolder.GetTotalNumOfSpheres()*(16), nullptr, chunkHolder.chunks.size(), GL_DYNAMIC_DRAW);
-    // glBindBufferBase(visibleSphereSSBO.GetType(), 2, visibleSphereSSBO.GetID());
-    // ////////////////////// Atomic Counter Buffer Binding 3
-    // uint32_t visibleSphereCounter = 0;
-    // Buffer atomicCounter(GL_ATOMIC_COUNTER_BUFFER);
-    // atomicCounter.GenBuffer(sizeof(uint32_t), &visibleSphereCounter, 1, GL_DYNAMIC_DRAW);
-    // glBindBufferBase(atomicCounter.GetType(), 3, atomicCounter.GetID());
-
-    // DEPTH
-    Texture deptTexture(GL_TEXTURE_2D, TextureType::DEPTH);
-    deptTexture.GLTexStorage2D(1, GL_R32I, cam.GetWidth(), cam.GetHeight());
-    deptTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    deptTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    deptTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    deptTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindImageTexture(0, deptTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
-    deptTexture.Unbind();
-    // COLOR
-    Texture colorTexture(GL_TEXTURE_2D, TextureType::SPECULAR);
-    colorTexture.GLTexStorage2D(1, GL_RGBA8, cam.GetWidth(), cam.GetHeight());
-    colorTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    colorTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    colorTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    colorTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindImageTexture(1, colorTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
-    colorTexture.Unbind();
-
-    Buffer spheresSSBO(GL_SHADER_STORAGE_BUFFER);
-    spheresSSBO.GenBuffer(chunkHolder.spheres.size()*(sizeof(Sphere)), chunkHolder.spheres.data(), chunkHolder.spheres.size(), GL_DYNAMIC_DRAW);
-    glBindBufferBase(spheresSSBO.GetType(), 0, spheresSSBO.GetID());
-
-    // rasterizer compute shader
-    ShaderProgram rastProgram;
-    rastProgram.AttachShader(GL_COMPUTE_SHADER, "res/shaders/rasterizer.comp");
-    rastProgram.LinkShaders();
-
-    // // create instanced arrays
-    // VertexBuffer sphereVBO;
-    // sphereVBO.GenVertexBuffer(sizeof(sphereVertices), sphereVertices, 4, GL_STATIC_DRAW);
-
-    // uint32_t sphereVAO;
-    // glGenVertexArrays(1, &sphereVAO);
-    // glBindVertexArray(sphereVAO);
-    // sphereVBO.Bind();
-    // glEnableVertexAttribArray(0);
-    // glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    // // bind ssbo as array buffer
-    // glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
-    // glEnableVertexAttribArray(1);
-    // glVertexAttribIPointer(1, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
-    // glVertexAttribDivisor(1, 1);
-    // sphereVBO.Unbind();
-    // glBindVertexArray(0);
-
-    // // generate z texture
-    // Texture zTexture(GL_TEXTURE_2D, TextureType::DEPTH);
-    // zTexture.GLTexImage2D(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    // zTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    // zTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // zTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    // zTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // zTexture.Unbind();
-
-    // // generate frame buffer for hi-zmap
-    // FrameBuffer zFrameBuffer(GL_FRAMEBUFFER);
-    // zFrameBuffer.Bind();
-    // glFramebufferTexture2D(zFrameBuffer.GetType(), GL_DEPTH_ATTACHMENT, zTexture.GetType(), zTexture.GetID(), 0);
-    // if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-    //     printf("[ERROR]: There is an error in glFrameBuffer\n");
-    // }
-    // zFrameBuffer.Unbind();
-
-    // // zBuffer shader
-    // ShaderProgram zBufferShader("res/shaders/hi_z_map.vert", "res/shaders/hi_z_map.frag", "res/shaders/hi_z_map.geom");
-    // zBufferShader.SetUniform1f("u_Radius", sphereRadius);
-    // // zbuffer VAO
-    // uint32_t zBufferVAO;
-    // glGenVertexArrays(1, &zBufferVAO);
-    // glBindVertexArray(zBufferVAO);
-    // // bind ssbo as array buffer
-    // glBindBuffer(GL_ARRAY_BUFFER, visibleSphereSSBO.GetID());
-    // glEnableVertexAttribArray(0);
-    // glVertexAttribIPointer(0, 3, GL_INT, sizeof(glm::ivec3), (void*)0);
-    // // unbind
-    // glBindBuffer(GL_ARRAY_BUFFER, 0);
-    // glBindVertexArray(0);
-
-    // rendering z buffer for testing
-    ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
-    VertexArray simpleQuadVA;
-    simpleQuadVA.GenVertexBuffer(sizeof(s_strip_quad), s_strip_quad, 4, GL_STATIC_DRAW);
-    simpleQuadVA.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), 0);
-    simpleQuadVA.InsertLayout(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), 3*sizeof(float));
+    // sphere size limit
+    float pointSizeRange[2];
+    glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange);
 
     while(!glfwWindowShouldClose(window)){
         // clear buffer
-        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // delta time calculation
         static float lastFrameTime;
@@ -361,207 +190,66 @@ int main(){
         // calculate view frustum
         cam.CalculateFrustum();
 
+        // Use uniform buffers for uniforms !!!
+        // 3 stage render is needed !!!
+        // Step 1 : render sphere's size is smaller than 16*16 using geometry shader
         
-        // // reset counter
-        // visibleSphereCounter = 0;
-        // atomicCounter.Bind();
-        // glBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
-        // // set bindings
-        // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, chunkSSBO.GetID());
-        // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, packedSpheres.GetID());
-        // glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, visibleSphereSSBO.GetID());
-        // glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 3, atomicCounter.GetID());
-        // compute shader frustum culling
-        // computeFrustum.Use();
-        // computeFrustum.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
-        // uint32_t numOfWorkGroups = (chunkHolder.chunks.size()+63) / 64; // for a local size of 64
-        // glDispatchCompute(numOfWorkGroups, 1, 1);
-        
-        // // Ensure writes are visible to subsequent rendering.
-        // glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ATOMIC_COUNTER_BARRIER_BIT);
-        // // read total number of visible objects
-        // atomicCounter.Bind();
-        // glGetBufferSubData(atomicCounter.GetType(), 0, sizeof(visibleSphereCounter), &visibleSphereCounter);
+        // if render size is bigger than max diameter send for 3rd step render
+        // Step 2 : render objects using gl draw points
+        // Step 3 : render big spheres using gl draw instanced
 
-        
-        if (deptTexture.GetWidth() != cam.GetWidth()){
-            // free old space
-            deptTexture.Free();
-            deptTexture.Generate(GL_TEXTURE_2D, TextureType::DEPTH);
-            // reallocate
-            deptTexture.GLTexStorage2D(1, GL_R32I, cam.GetWidth(), cam.GetHeight());
-            deptTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            deptTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            deptTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            deptTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glBindImageTexture(0, deptTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_R32I);
-
-            // color texture
-            colorTexture.Free();
-            colorTexture.Generate(GL_TEXTURE_2D, TextureType::SPECULAR);
-            // reallocate
-            colorTexture.GLTexStorage2D(1, GL_RGBA8, cam.GetWidth(), cam.GetHeight());
-            colorTexture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            colorTexture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            colorTexture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            colorTexture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glBindImageTexture(1, colorTexture.GetID(), 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
-        }
-
-        // clear the texture
-        int32_t clearVal = glm::floatBitsToInt(1.0f);
-        glClearTexImage(deptTexture.GetID(), 0, GL_RED_INTEGER, GL_INT, &clearVal);
-        glm::vec4 clearImage = glm::vec4(0.0, 0.0, 0.0, 1.0);
-        glClearTexImage(colorTexture.GetID(), 0, GL_RGBA, GL_FLOAT, &clearImage);
-        
-        rastProgram.Use();
-        rastProgram.SetUniformMatrix4fv("u_ProjView", projView);
-        rastProgram.SetUniformMatrix4fv("u_View", view);
-        rastProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+        // focal length in pixel size, so the focalLength in how many pixel size !!!
         float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
-        rastProgram.SetUniform1f("u_FocalLength", focalLenght);
-        rastProgram.SetUniform1f("u_Near", cam.GetNear());
-        rastProgram.SetUniform1f("u_Far", cam.GetFar());
-        rastProgram.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
-        rastProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
+        pointProgram.Use();
+        pointProgram.SetUniformMatrix4fv("u_Proj", proj);
+        pointProgram.SetUniformMatrix4fv("u_View", view);
+        pointProgram.SetUniformMatrix4fv("u_ProjView", projView);
+        pointProgram.SetUniformMatrix4fv("u_InvProj", glm::inverse(proj));
+        pointProgram.SetUniformMatrix4fv("u_InvViewMatrix", glm::inverse(view));
+
+        pointProgram.SetUniformMatrix3fv("u_CamRotation", glm::transpose(glm::mat3(view)));
+
+        pointProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
+        pointProgram.SetUniform1f("u_MaxDiameter", pointSizeRange[1]);
+        pointProgram.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+        pointProgram.SetUniform3fv("u_CamPos", cam.GetPosition());
+        pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
+        pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
+        pointProgram.SetUniform3fv("u_CamForw", cam.GetFront());
+        pointProgram.SetUniform1f("u_FocalLength", focalLenght);
+        pointProgram.SetUniform1f("u_FarDistance", cam.GetFar());
+        pointProgram.SetUniform1f("u_NearDist", cam.GetNear());
+        pointProgram.SetUniform1i("u_Texture", 1);
+        glm::vec2 halfTan;
+        halfTan.y = glm::tan(cam.GetFovYRad()*0.5);
+        halfTan.x = halfTan.y * cam.GetAspectRatio();
+        pointProgram.SetUniform2fv("u_TanHalfFOV", halfTan);
+        //pointProgram.SetUniform2fv("u_HalfOfFOV", glm::vec2((cam.GetFovYRad()*0.5)*cam.GetAspectRatio(), cam.GetFovYRad()*0.5));
+
+        //pointProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+
+        //pointProgram.SetUniformMatrix4fv("invViewMatrix", glm::inverse(view));
+
+        // pointProgram.SetUniform3fv("u_CameraFront", cam.GetFront());
+        // pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
+        // pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
+        sphereTex.BindTo(1);
+        sphereVAO.Bind();
+        glDrawArrays(GL_POINTS, 0, sphereVAO.m_VertBuffer.GetVertAmount());
+
+        // rastProgram.Use();
+        // rastProgram.SetUniformMatrix4fv("u_View", projView);
+        // rastProgram.SetUniformMatrix4fv("u_View", view);
+        // rastProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
         
-        
-        uint32_t numOfWorkGroups = (chunkHolder.spheres.size()+511) / 512; // for a local size of 64
-        glDispatchCompute(numOfWorkGroups, 1, 1);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-        // test draw
-        simpleQuadPr.Use();
-        simpleQuadPr.SetUniform1i("u_Tex", 0);
-        colorTexture.BindTo(0);
-        simpleQuadVA.Bind();
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
-        
-        // // set uniform data of sphere shader
-        // sphereShader.Use();
-        // sphereShader.SetUniformMatrix4fv("u_ProjView", projView);
-        // sphereShader.SetUniform3fv("u_CameraPos", cam.GetPosition());
-        // sphereShader.SetUniform1f("u_Radius", sphereRadius);
-        // // draw visible spheres
-        // glBindVertexArray(sphereVAO);
-        // glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, visibleSphereCounter);
-
-        // // bind to depth renderer
-        // zFrameBuffer.Bind();
-        // // check texture and screen size
-        // if (zTexture.GetWidth() != cam.GetWidth()){
-        //     // reallocate
-        //     zTexture.GLTexImage2D(0, GL_DEPTH_COMPONENT32F, cam.GetWidth(), cam.GetHeight(), GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-        // }
-        // // clear old depth buffer
-        // glClear(GL_DEPTH_BUFFER_BIT);
-        // zBufferShader.Use();
-        // zBufferShader.SetUniform1f("u_Radius", sphereRadius);
-        // zBufferShader.SetUniform1f("u_FarDist", cam.GetFar());
-        // zBufferShader.SetUniformMatrix4fv("u_ProjView", projView);
-        // zBufferShader.SetUniform3fv("u_CameraPos", cam.GetPosition());
-        // glBindVertexArray(zBufferVAO);
-        // glDrawArrays(GL_POINTS, 0, visibleSphereCounter);
-        // zFrameBuffer.Unbind();
-
-
-
-        // generate mipmaps
-        // accomplish h-z cull
-        // render passed objects
-
-
-        // //printf("Total num of visible spheres: %u\n", visibleSphereCounter);
-
-        // // //////////// Compute Shader
-        // computeShader.Use();
-        // computeShader.SetUniform1f("u_Time", glfwGetTime());
-        // //computeText.BindImageTexture(0, 0, GL_FALSE, 0, GL_READ_WRITE);
-        // glDispatchCompute(computeText.GetWidth()/10, computeText.GetHeight()/10, 1);
-        // // make sure writing to image has finished before read
-        // glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
-        // ////// Print to screen
-        // computeText.BindTo(0);
-        // simpleQuadPr.Use();
-        // simpleQuadPr.SetUniform1i("u_Tex", 0);
-        // simpleQuadVA.Bind();
-        // glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
-
-        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, instanceVBO.GetVertAmount());
-        
-        // // load visible chunks to the command array
-        // drawCommands.resize(0);
-        // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-        //     if (chunkHolder.chunks[i].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
-        //         drawCommands.emplace_back(4, chunkHolder.chunks[i].m_Positions.size(), 0, chunkHolder.chunks[i].m_StartIndex);
-        //     }
-        // }
-        // // load array to the buffer
-        // commandBuffer.Bind();
-        // glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0, drawCommands.size()*sizeof(DrawArraysIndirectCommand), drawCommands.data());
-        // // draw command buffer
-        // glMultiDrawArraysIndirect(GL_TRIANGLE_STRIP, 0, drawCommands.size(), 0);
-
-        // for (uint32_t i = 0; i < 400000; i++){ // max 400 k frustum check is good
-        //     if (chunkHolder.chunks[0].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
-        //         test += i*1;
-        //     }
-        // }
-        
-        // uint32_t visibleobj = 0;
-        // // draw spheres
-        // glBindVertexArray(sphereVAO);
-        // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
-        //     // sphereShader.Use();
-        //     // if (chunkHolder.chunks[i].m_BoundBox.IsOnFrustum(cam.m_Frustum)){
-        //     //     sphereShader.SetUniform1i("u_ChunkPos.x", chunkHolder.chunks[i].m_Position.x);
-        //     //     sphereShader.SetUniform1i("u_ChunkPos.z", chunkHolder.chunks[i].m_Position.z);
-        //     //     glDrawArraysInstancedBaseInstance(GL_TRIANGLE_STRIP, 0, 4, chunkHolder.chunks[i].m_Spheres.size(),
-        //     //         chunkHolder.chunks[i].m_StartIndex);
-        //     //     visibleobj++;
-        //     //     // boxShader.Use();
-        //     //     // boxShader.SetUniformMatrix4fv("u_ProjView", projView);
-                
-        //     //     // glm::mat4 modelBoundBox = glm::mat4(1.0f);
-        //     //     // modelBoundBox = glm::translate(modelBoundBox, cam.GetUp() + cam.GetFront() * 10.0f + cam.GetPosition());
-        //     //     // modelBoundBox = glm::scale(modelBoundBox, 5.0f*glm::vec3(1.0f));
-        //     //     // boxShader.SetUniformMatrix4fv("u_Model", modelBoundBox);
-        //     //     // box.Bind();
-        //     //     // glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());  
-        //     // }
-
-        //     boxShader.Use();
-        //     boxShader.SetUniformMatrix4fv("u_ProjView", projView);
-        //     glm::mat4 modelBoundBox = glm::mat4(1.0f);
-        //     modelBoundBox = glm::translate(modelBoundBox, chunkHolder.chunks[i].m_ChunkInfo.boundBox.GetCenter());
-        //     modelBoundBox = glm::scale(modelBoundBox, chunkHolder.chunks[i].m_ChunkInfo.boundBox.GetSize());
-        //     boxShader.SetUniformMatrix4fv("u_Model", modelBoundBox);
-        //     box.Bind();
-        //     glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());  
-        // }
-        
-        // boxShader.Use();
-        // boxShader.SetUniformMatrix4fv("u_ProjView", projView);
-        
-        // glm::mat4 modelBoundBox = glm::mat4(1.0f);
-        // modelBoundBox = glm::translate(modelBoundBox, cam.m_Up + cam.m_Front * 10.0f + cam.m_Position);
-        // modelBoundBox = glm::scale(modelBoundBox, 5.0f*glm::vec3(1.0f));
-        // boxShader.SetUniformMatrix4fv("u_Model", modelBoundBox);
-        // box.Bind();
-        // glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());  
+        // rastProgram.SetUniform1f("u_FocalLength", focalLenght);
+        // rastProgram.SetUniform1f("u_Near", cam.GetNear());
+        // rastProgram.SetUniform1f("u_Far", cam.GetFar());
+        // rastProgram.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
+        // rastProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
         
 
-        // // draw skybox
-        // //glDepthFunc(GL_LEQUAL);
-        // skyboxShader.Use();
-        // skyboxShader.SetUniformMatrix4fv("u_Projection", projection);
-        // glm::mat4 skyView = glm::mat4(glm::mat3(view));
-        // skyboxShader.SetUniformMatrix4fv("u_View", skyView);
-        // skyboxShader.SetUniform1i("u_Skybox", 0);
-        // skyboxTex.BindTo(0);
-        // skybox.Bind();
-        // glDrawArrays(GL_TRIANGLES, 0, skybox.m_VertBuffer.GetVertAmount());
-        // //glDepthFunc(GL_LESS);
+        
 
         glfwSwapBuffers(window);
         // check and call events and swap the buffers
@@ -592,6 +280,10 @@ void print_limits(){
     GLint maxWorkGroupInvocations;
     glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &maxWorkGroupInvocations);
     printf("Max Work Group Invocations: %i\n", maxWorkGroupInvocations);
+
+    float pointSizeRange[2];
+    glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange);
+    printf("Point size range %f, %f\n", pointSizeRange[0],pointSizeRange[1]);
 }
 
 // float generateHeight(const glm::vec3& position) {
@@ -649,7 +341,7 @@ void processInput(GLFWwindow* window){
         esc_key_pressed = false;
     }
 
-    float cameraSpeed = 10.0f; // adjust accordingly
+    float cameraSpeed = 2.0f; // adjust accordingly
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
         cameraSpeed += 50.0f;

@@ -24,12 +24,10 @@ struct ChunkInfo { // 4 + 4 + 8 + 24 = 40 bytes
 
 // uint32 data order is yVal + zOffset + xOffset
 struct Sphere { // 16 bytes
-    glm::ivec3 position;
-    float radius;
+    glm::vec4 position;
 
     Sphere () = default;
-    Sphere (int32_t x, int32_t y, int32_t z, float rad) : position(x, y, z), radius(rad) {}
-
+    Sphere (float x, float y, float z, float rad) : position(x, y, z, rad){}
 };
 
 class Chunk {
