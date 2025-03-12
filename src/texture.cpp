@@ -38,7 +38,7 @@ void Texture::GLTexImage2D(GLint level, GLint internalFormat, int32_t width, int
     glBindTexture(m_GLType, m_TextureID);
     glTexImage2D(m_GLType, level, internalFormat, width, height, 0, format, type, data);
 }
-void Texture::GLTexStorage2D(GLint level, GLint internalFormat, int32_t width, int32_t height){
+void Texture::GLTexStorage2D(GLint level, GLenum internalFormat, int32_t width, int32_t height){
     m_Width = width;
     m_Height = height;
     m_Format = internalFormat;

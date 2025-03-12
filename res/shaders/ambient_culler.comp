@@ -1,9 +1,0 @@
-#version 460 core
-// Define a work group size. Adjust the local size as needed.
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-
-struct VisibleChunk { // 16 bytes
-    uint offset;
-    uint size;
-    ivec2 pos; 
-};

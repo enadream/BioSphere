@@ -7,17 +7,20 @@ out SphereData {
     vec2 pixelCenter; // pixel center of the sphere
     float viewZOverFocalLength; // viewZ / focalLength 
     float radius; // r
-    float pointSize; // gl point size
 } v_Sphere;
 
 // Uniforms supplied by the application:
 uniform mat4 u_View;      // world-to-view matrix
 uniform mat4 u_Proj;      // projection matrix
 uniform vec3 u_CamPos;    // camera position
+uniform vec3 u_CamUp;
+uniform vec3 u_CamRight;
+
 uniform ivec2 u_Resolution;
 
 uniform float u_MaxDiameter;  // maxium size of point
-uniform vec4 u_frustumPlanes[6];
+uniform float u_FarDistance;
+uniform vec4 u_FrustumPlanes[6];
 uniform float u_FocalLength;
 
 bool IsSphereVisible(vec3 pos, float radius);
@@ -100,7 +103,6 @@ void main(){
     v_Sphere.pixelCenter = (ndc.xy*0.5 + 0.5) * u_Resolution;
     v_Sphere.viewZOverFocalLength = -viewCenter.z / u_FocalLength;
     v_Sphere.radius = radius;
-    v_Sphere.pointSize = pointSize;
 
     // calculate the ellipse center on the screen
     // set the values
@@ -111,7 +113,7 @@ void main(){
 bool IsSphereVisible(vec3 pos, float radius){
     for (int i = 0; i < 6; i++){
         // Calculate signed distance from sphere center to the plane
-        float dist = dot(pos, u_frustumPlanes[i].xyz) + u_frustumPlanes[i].w;
+        float dist = dot(pos, u_FrustumPlanes[i].xyz) + u_FrustumPlanes[i].w;
 
         // If the sphere is entirely behind the plane, it's not visible
         if (dist < -radius * 2.3) {

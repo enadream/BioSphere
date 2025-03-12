@@ -35,7 +35,7 @@ public: // functions
     void SetTexParametrI(GLenum pname, GLint param);
     // automatically binds, reallocation allowed
     void GLTexImage2D(GLint level, GLint internalFormat, int32_t width, int32_t height, GLenum format, GLenum type, const void * data);
-    void GLTexStorage2D(GLint level, GLint internalFormat, int32_t width, int32_t height);
+    void GLTexStorage2D(GLint level, GLenum internalFormat, int32_t width, int32_t height);
 
     void Free();
     void Generate(GLenum gl_type, TextureType tex_type);
@@ -60,6 +60,9 @@ public: // functions
     }
     inline uint32_t GetHeight(){
         return m_Height;
+    }
+    inline int32_t GetFormat(){
+        return m_Format;
     }
     inline GLenum GetType(){
         return m_GLType;

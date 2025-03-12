@@ -15,6 +15,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/noise.hpp>
 
+#include "debug_func.hpp"
 #include "texture.hpp"
 #include "camera.hpp"
 #include "temp_data.hpp"
@@ -25,6 +26,7 @@
 #include "draw_array_command.hpp"
 #include "gl_buffer.hpp"
 #include "frame_buffer.hpp"
+#include "compute_handler.hpp"
 
 static Camera * m_MainCamera;
 
@@ -33,14 +35,14 @@ static double lastX, lastY;
 
 constexpr float sphereRadius = 0.5f;
 
-#include "debug_func.hpp"
 
 static glm::mat4 lookToCamera(const glm::vec3 &quad_pos, float radius, float &scale_factor);
 void frame_buffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void print_limits();
+void create_texture_2D(Texture &texture, uint32_t internal_format, int32_t width, int32_t height, uint32_t bind_index, uint32_t access);
+
 std::string vec3ToString(const glm::vec3& vec);
 
 // // Enable dedicated graphics for NVIDIA:
@@ -76,7 +78,7 @@ int main(){
     }
     
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Vsync
+    glfwSwapInterval(0); // Vsync
 
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -88,15 +90,14 @@ int main(){
         return -1;
     }
 
-    print_limits();
-
+    
     glDisable(GL_MULTISAMPLE);
     //glEnable(GL_FRAMEBUFFER_SRGB); // gamma correction
     // set viewport coordinats first 2 value are lower left corner of the window
     glViewport(0, 0, 800, 600);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     // Depth testing
-    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     //glEnable(GL_CULL_FACE);
@@ -116,27 +117,62 @@ int main(){
     cam.SetPositionY(150.0f);
     cam.SetPositionZ(0.07 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
 
-    printf("Total number of spheres: %u\n", chunkHolder.spheres.size());
+    printf("Total number of spheres: %llu\n", chunkHolder.spheres.size());
+    ComputeConfig::PrintLimits();
+    
+    ComputeConfig computeConfig;
+    computeConfig.CalculateSize(chunkHolder.spheres.size(), 32);
+    computeConfig.PrintSizes();
 
     // load data to the buffer
     VertexArray sphereVAO;
     sphereVAO.GenVertexBuffer(sizeof(Sphere)*chunkHolder.spheres.size(), chunkHolder.spheres.data(), chunkHolder.spheres.size(), GL_STATIC_DRAW);
     sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(Sphere), 0);
-    
+    // Bind vertex buffer as SSBO
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereVAO.m_VertBuffer.GetID());
 
-    ShaderProgram pointProgram("res/shaders/ellipse.vert", "res/shaders/ellipse.frag");
-    // directional light
-    pointProgram.Use();
-    pointProgram.SetUniform3fv("u_DirLight.direction", glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f)));
-    pointProgram.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
-    pointProgram.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
-    pointProgram.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
+    // compute shader
+    ShaderProgram drawCompute;
+    drawCompute.AttachShader(GL_COMPUTE_SHADER, "res/shaders/draw_ellipse.comp");
+    drawCompute.LinkShaders();
+    // atomic counters
+    Buffer atomicCounters(GL_ATOMIC_COUNTER_BUFFER);
+    atomicCounters.GenBuffer(2 * sizeof(uint32_t), nullptr, 2, GL_DYNAMIC_DRAW);
+    glBindBufferBase(atomicCounters.GetType(), 1, atomicCounters.GetID());
+    // SSBOs
+    Buffer spherePoints(GL_SHADER_STORAGE_BUFFER);
+    spherePoints.GenBuffer(12 * 1000, nullptr, 1000, GL_DYNAMIC_DRAW);
+    glBindBufferBase(spherePoints.GetType(), 2, spherePoints.GetID());
+    Buffer sphereQuads(GL_SHADER_STORAGE_BUFFER);
+    sphereQuads.GenBuffer(8 * 1000, nullptr, 1000, GL_DYNAMIC_DRAW);
+    glBindBufferBase(sphereQuads.GetType(), 3, sphereQuads.GetID());
+
+    /////////// Textures ///////////
+    Texture gPosition(GL_TEXTURE_2D, TextureType::UNDEFINED);
+    create_texture_2D(gPosition, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 0, GL_READ_WRITE);
+
+    Texture gNormal(GL_TEXTURE_2D, TextureType::UNDEFINED);
+    create_texture_2D(gNormal, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 1, GL_READ_WRITE);
+
+    Texture gIndex(GL_TEXTURE_2D, TextureType::UNDEFINED);
+    create_texture_2D(gIndex, GL_R32UI, cam.GetWidth(), cam.GetHeight(), 2, GL_READ_WRITE);
+
+    Texture gDepth(GL_TEXTURE_2D, TextureType::UNDEFINED);
+    create_texture_2D(gDepth, GL_R32I, cam.GetWidth(), cam.GetHeight(), 3, GL_READ_WRITE);
+
+
+    // ShaderProgram pointProgram("res/shaders/ellipse.vert", "res/shaders/ellipse.frag");
+    // // directional light
+    // pointProgram.Use();
+    // pointProgram.SetUniform3fv("u_DirLight.direction", glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f)));
+    // pointProgram.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
+    // pointProgram.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
+    // pointProgram.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
 
 
     std::string title = "BioSphere Evolution : ";
     float frameUpate = 0.0;
     uint32_t frameCount = 0;
-
 
     // Sphere TEXTURES
     std::vector<string> spFaces =
@@ -157,11 +193,18 @@ int main(){
 
     // sphere size limit
     float pointSizeRange[2];
-    glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange);
+    glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange); // min and max range 
+
+    // rendering z buffer for testing
+    ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
+    VertexArray simpleQuadVA;
+    simpleQuadVA.GenVertexBuffer(sizeof(s_strip_quad), s_strip_quad, 4, GL_STATIC_DRAW);
+    simpleQuadVA.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), 0);
+    simpleQuadVA.InsertLayout(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), 3*sizeof(float));
 
     while(!glfwWindowShouldClose(window)){
         // clear buffer
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // delta time calculation
         static float lastFrameTime;
@@ -190,40 +233,101 @@ int main(){
         // calculate view frustum
         cam.CalculateFrustum();
 
+        // check texture size
+        if (gPosition.GetWidth() != cam.GetWidth()){
+            // free old space
+            gPosition.Free();
+            gPosition.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
+            gNormal.Free();
+            gNormal.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
+            gIndex.Free();
+            gIndex.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
+            gDepth.Free();
+            gDepth.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
+
+            // reallocate
+            create_texture_2D(gPosition, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 0, GL_READ_WRITE);
+            create_texture_2D(gNormal, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 1, GL_READ_WRITE);
+            create_texture_2D(gIndex, GL_R32UI, cam.GetWidth(), cam.GetHeight(), 2, GL_READ_WRITE);
+            create_texture_2D(gDepth, GL_R32I, cam.GetWidth(), cam.GetHeight(), 3, GL_READ_WRITE);
+        }
+        // reset atomic counters
+        uint32_t counterValues[2] = {0, 0};
+        atomicCounters.Bind();
+        glBufferSubData(atomicCounters.GetType(), 0, sizeof(counterValues), counterValues);
+
+        // reset textures
+        // the existing image will be check based on depth value, if depth is 2.0 which means the pixel should be all zero
+        const int32_t clearVal = glm::floatBitsToInt(2.0f);
+        glClearTexImage(gDepth.GetID(), 0, GL_RED_INTEGER, GL_INT, &clearVal);
+
+        const float clearColorRGBA[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        glClearTexImage(gNormal.GetID(), 0, GL_RGBA, GL_FLOAT, &clearColorRGBA);
+    
+        float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
+        float oneOverDist = 1.0 / cam.GetFar();
+        // setting uniforms
+        drawCompute.Use();
+        drawCompute.SetUniformMatrix4fv("u_View", view);
+        drawCompute.SetUniformMatrix4fv("u_Proj", proj);
+        drawCompute.SetUniform3fv("u_CamPos", cam.GetPosition());
+        drawCompute.SetUniform3fv("u_CamUp", cam.GetUp());
+        drawCompute.SetUniform3fv("u_CamRight", cam.GetRight());
+        drawCompute.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+
+        drawCompute.SetUniform4fv("u_FrustumPlanes", cam.m_Frustum.planes[0], 6);
+        drawCompute.SetUniform1f("u_MaxPointSize", pointSizeRange[1]);
+        drawCompute.SetUniform1f("u_OneOverFarDistance", oneOverDist);
+        drawCompute.SetUniform1f("u_FocalLength", focalLenght);
+        drawCompute.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
+
+        glDispatchCompute(computeConfig.DispatchSize.x, computeConfig.DispatchSize.y, computeConfig.DispatchSize.z);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+
+        // test draw
+        simpleQuadPr.Use();
+        simpleQuadPr.SetUniform1i("u_Tex", 1);
+        gNormal.BindTo(1);
+        simpleQuadVA.Bind();
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
+
         // Use uniform buffers for uniforms !!!
         // 3 stage render is needed !!!
-        // Step 1 : render sphere's size is smaller than 16*16 using geometry shader
-        
+        // Step 1 : render sphere's size is smaller than 16*16 using compute shader
+
         // if render size is bigger than max diameter send for 3rd step render
         // Step 2 : render objects using gl draw points
         // Step 3 : render big spheres using gl draw instanced
 
-        // focal length in pixel size, so the focalLength in how many pixel size !!!
-        float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
-        pointProgram.Use();
-        pointProgram.SetUniformMatrix4fv("u_Proj", proj);
-        pointProgram.SetUniformMatrix4fv("u_View", view);
-        pointProgram.SetUniformMatrix4fv("u_ProjView", projView);
-        pointProgram.SetUniformMatrix4fv("u_InvProj", glm::inverse(proj));
-        pointProgram.SetUniformMatrix4fv("u_InvViewMatrix", glm::inverse(view));
+        // // focal length in pixel size, so the focalLength in how many pixel size !!!
+        // float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
+        // pointProgram.Use();
+        // pointProgram.SetUniformMatrix4fv("u_Proj", proj);
+        // pointProgram.SetUniformMatrix4fv("u_View", view);
+        // pointProgram.SetUniformMatrix4fv("u_ProjView", projView);
+        // pointProgram.SetUniformMatrix4fv("u_InvProj", glm::inverse(proj));
+        // pointProgram.SetUniformMatrix4fv("u_InvViewMatrix", glm::inverse(view));
 
-        pointProgram.SetUniformMatrix3fv("u_CamRotation", glm::transpose(glm::mat3(view)));
+        // pointProgram.SetUniformMatrix3fv("u_CamRotation", glm::transpose(glm::mat3(view)));
 
-        pointProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
-        pointProgram.SetUniform1f("u_MaxDiameter", pointSizeRange[1]);
-        pointProgram.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
-        pointProgram.SetUniform3fv("u_CamPos", cam.GetPosition());
-        pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
-        pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
-        pointProgram.SetUniform3fv("u_CamForw", cam.GetFront());
-        pointProgram.SetUniform1f("u_FocalLength", focalLenght);
-        pointProgram.SetUniform1f("u_FarDistance", cam.GetFar());
-        pointProgram.SetUniform1f("u_NearDist", cam.GetNear());
-        pointProgram.SetUniform1i("u_Texture", 1);
-        glm::vec2 halfTan;
-        halfTan.y = glm::tan(cam.GetFovYRad()*0.5);
-        halfTan.x = halfTan.y * cam.GetAspectRatio();
-        pointProgram.SetUniform2fv("u_TanHalfFOV", halfTan);
+        // pointProgram.SetUniform4fv("u_FrustumPlanes", cam.m_Frustum.planes[0], 6);
+        // pointProgram.SetUniform1f("u_MaxDiameter", pointSizeRange[1]);
+        // pointProgram.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+        // pointProgram.SetUniform3fv("u_CamPos", cam.GetPosition());
+        // pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
+        // pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
+        // pointProgram.SetUniform3fv("u_CamForw", cam.GetFront());
+        // pointProgram.SetUniform1f("u_FocalLength", focalLenght);
+        // pointProgram.SetUniform1f("u_FarDistance", cam.GetFar());
+        // pointProgram.SetUniform1f("u_NearDist", cam.GetNear());
+        // pointProgram.SetUniform1i("u_Texture", 1);
+
+
+
+        // glm::vec2 halfTan;
+        // halfTan.y = glm::tan(cam.GetFovYRad()*0.5);
+        // halfTan.x = halfTan.y * cam.GetAspectRatio();
+        // pointProgram.SetUniform2fv("u_TanHalfFOV", halfTan);
         //pointProgram.SetUniform2fv("u_HalfOfFOV", glm::vec2((cam.GetFovYRad()*0.5)*cam.GetAspectRatio(), cam.GetFovYRad()*0.5));
 
         //pointProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
@@ -233,9 +337,9 @@ int main(){
         // pointProgram.SetUniform3fv("u_CameraFront", cam.GetFront());
         // pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
         // pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
-        sphereTex.BindTo(1);
-        sphereVAO.Bind();
-        glDrawArrays(GL_POINTS, 0, sphereVAO.m_VertBuffer.GetVertAmount());
+        //sphereTex.BindTo(1);
+        // sphereVAO.Bind();
+        // glDrawArrays(GL_POINTS, 0, sphereVAO.m_VertBuffer.GetVertAmount());
 
         // rastProgram.Use();
         // rastProgram.SetUniformMatrix4fv("u_View", projView);
@@ -260,55 +364,14 @@ int main(){
     return 0;
 }
 
-void print_limits(){
-    // limits
-    int nrAttributes;
-    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &nrAttributes);
-    printf("Maximum nr of vertex attributes supported: %i \n", nrAttributes);
-    glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &nrAttributes);
-    printf("Maximum nr of shader storage buffer bindings: %i \n", nrAttributes);
-    GLint maxWorkGC[3];
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &maxWorkGC[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &maxWorkGC[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &maxWorkGC[2]);
-    printf("Max Work Group Count: %i, %i, %i\n", maxWorkGC[0], maxWorkGC[1], maxWorkGC[2]);
-    GLint maxWorkGroupSize[3];
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &maxWorkGroupSize[0]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &maxWorkGroupSize[1]);
-    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &maxWorkGroupSize[2]);
-    printf("Max Work Group Size: %i, %i, %i\n", maxWorkGroupSize[0], maxWorkGroupSize[1], maxWorkGroupSize[2]);
-    GLint maxWorkGroupInvocations;
-    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &maxWorkGroupInvocations);
-    printf("Max Work Group Invocations: %i\n", maxWorkGroupInvocations);
-
-    float pointSizeRange[2];
-    glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange);
-    printf("Point size range %f, %f\n", pointSizeRange[0],pointSizeRange[1]);
+void create_texture_2D(Texture &texture, uint32_t internal_format, int32_t width, int32_t height, uint32_t bind_index, uint32_t access){
+    texture.GLTexStorage2D(1, internal_format, width, height);
+    texture.SetTexParametrI(GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    texture.SetTexParametrI(GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    texture.SetTexParametrI(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    texture.SetTexParametrI(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindImageTexture(bind_index, texture.GetID(), 0, GL_FALSE, 0, access, internal_format);
 }
-
-// float generateHeight(const glm::vec3& position) {
-//     constexpr float baseFrequency = 0.005f;
-//     constexpr float baseAmplitude = 50.0f;
-
-//     constexpr float detailFrequency = 0.05f;
-//     constexpr float detailAmplitude = 0.0f;
-
-//     // Generate base terrain (large-scale features)
-//     float baseHeight = Simplex::fBm(glm::vec2(position.x, position.z) * baseFrequency, 4, 2.0f, 0.5f) * baseAmplitude;
-
-//     // Generate details (small-scale noise)
-//     float detailHeight = Simplex::fBm(glm::vec2(position.x, position.z) * detailFrequency, 3, 2.0f, 0.5f) * detailAmplitude;
-
-//     // Combine base terrain and details
-//     float height = baseHeight + detailHeight;
-
-//     return height;
-// }
-
-// // Usage function
-// float getHeight(float x, float z) {
-//     return terrain(vec2(x, z));
-// }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos){
     // printf("mouse location x: %lf, y: %lf\n", xpos, ypos);
@@ -399,48 +462,3 @@ std::string mat4ToString(const glm::mat4& mat) {
     oss << ")";
     return oss.str();
 }
-
-// static glm::mat4 lookToCamera(const glm::vec3 &quad_pos, float radius, float &scale_factor){
-
-//     // Calculate direction to the camera
-//     glm::vec3 distVector = m_MainCamera->m_Position - quad_pos;
-//     glm::vec3 direction = glm::normalize(distVector);
-
-//     // Compute right and up vectors for the quad
-//     glm::vec3 right = glm::normalize(glm::cross(glm::vec3(0.0, 1.0, 0.0), direction)); // m_MainCamera->m_WorldUp
-//     glm::vec3 up = glm::cross(direction, right);
-
-//     // Create the rotation matrix
-//     glm::mat4 rotation = glm::mat4(1.0f);
-//     rotation[0] = glm::vec4(right, 0.0f);
-//     rotation[1] = glm::vec4(up, 0.0f);
-//     rotation[2] = glm::vec4(direction, 0.0f); // Negative to face the camera
-
-//     // Create the translation matrix
-//     glm::mat4 translation = glm::translate(glm::mat4(1.0f), quad_pos);
-
-//     // scale
-//     float distance = glm::length(distVector);
-//     glm::mat4 scale;
-    
-
-//     if (distance > 1.1*radius){
-//         scale_factor = distance / glm::sqrt((distance-radius)*(distance+radius));
-//         scale = glm::scale(glm::mat4(1.0f), glm::vec3(scale_factor, scale_factor, scale_factor));
-//     } else {
-//         scale_factor = 1.0;
-//         scale = glm::mat4(1.0f);
-//     }
-
-    
-//     // Combine translation and rotation
-//     glm::mat4 model = translation * rotation * scale;
-
-
-//     // Debug output
-//     // std::cout << "Direction: " << vec3ToString(direction) << std::endl;
-//     // std::cout << "Model Matrix: " << mat4ToString(model) << std::endl;
-    
-
-//     return model;
-// }

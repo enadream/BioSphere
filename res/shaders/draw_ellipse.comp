@@ -1,0 +1,198 @@
+#version 460 core
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+// padding of std430 has to match with sphere in c++ struct!!
+struct Sphere { // 16 bytes
+    vec4 position;
+};
+// Read Sphere Array Buffer
+layout(std430, binding = 0) readonly buffer SphereBuffer {
+    Sphere spheres[];
+};
+
+// Atomic counter buffer with two counters
+layout(binding = 1, offset = 0) uniform atomic_uint pointCounter;
+layout(binding = 1, offset = 4) uniform atomic_uint quadCounter;
+
+struct PointVarying { // 32 bytes
+    uint ID; // id of the sphere
+    float ScaledRadius; // scaled radius of the sphere
+    float PointSize; // screen size of the sphere
+};
+// Point Render
+layout(std430, binding = 2) writeonly buffer SpherePoints {
+    PointVarying pointIDs[];
+};
+
+struct QuadVarying { // 8 bytes
+    uint ID; // id of the sphere
+    float ScaledRadius; // scaled radius of the sphere
+};
+// Quad Render
+layout(std430, binding = 3) writeonly buffer SphereQuads {
+    QuadVarying quadIDs[];
+};
+
+// Bind to G buffers Textures
+layout(rgba32f, binding = 0) uniform writeonly image2D gPosition;
+layout(rgba32f, binding = 1) uniform writeonly image2D gNormal;
+layout(r32ui, binding = 2) uniform writeonly uimage2D gIndex;
+layout(r32i, binding = 3) uniform iimage2D gDepth;
+
+
+// functions
+bool IsSphereVisible(vec3 pos, float radius);
+
+// Uniforms supplied by the application:
+uniform mat4 u_View;      // world-to-view matrix
+uniform mat4 u_Proj;      // projection matrix
+uniform vec3 u_CamPos;    // camera position
+uniform vec3 u_CamUp;
+uniform vec3 u_CamRight;
+uniform ivec2 u_Resolution;
+
+uniform vec4 u_FrustumPlanes[6];
+uniform float u_MaxPointSize;  // maxium size of point
+uniform float u_OneOverFarDistance; // (1.0 / Fardistance)
+uniform float u_FocalLength;
+uniform uint u_TotalNumOfSpheres;
+
+void main() {
+    uint spIndex = gl_GlobalInvocationID.x 
+                 + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x
+                 + gl_GlobalInvocationID.z * gl_NumWorkGroups.x * gl_WorkGroupSize.x * gl_NumWorkGroups.y * gl_WorkGroupSize.y;
+
+if (spIndex < u_TotalNumOfSpheres){
+    // read sphere data
+    vec4 spPos = spheres[spIndex].position;
+    vec3 sphereCenter = spPos.xyz;
+    float radius = spPos.w;
+
+    // frustum culling
+    if (!IsSphereVisible(sphereCenter, radius)){
+        return;
+    }
+
+    // --- Cone and Plane Parameters ---
+    vec3 camToCenter = sphereCenter - u_CamPos;
+    vec3 centerToCam = -camToCenter;
+    float oc = length(camToCenter);
+    if (oc < radius * 1.01){ // if camera too close to the sphere don't render it
+        return;
+    }
+
+    float oc2 = oc*oc;
+    float scaledRadius = radius * oc / sqrt(oc2 - radius*radius);
+    // find the center of the sphere based on camera view
+    vec3 viewCenter = (u_View * vec4(sphereCenter, 1.0)).xyz;
+    vec3 camViewDir = viewCenter / oc; // the length of the view center is oc
+    // cos(alpha) = dot(vec3(0, 0, -1.0), camViewDir) = camViewDir.z * -1.0 = -camViewDir.z
+    float cosAlpha = -camViewDir.z;
+    // semi-minor = b
+    float semiMinor = u_FocalLength * scaledRadius / -viewCenter.z;
+    // semi-major = a
+    float semiMajor = semiMinor / cosAlpha;
+    float pointSize = semiMajor * 2.0;
+
+    // if radius is bigger than some value render the sphere in different
+    if (pointSize < 9){ // render now 8x8 pixel
+        // Find the center of the sphere in pixel coordinate
+        vec4 projectedCenter = u_Proj * vec4(viewCenter, 1.0);
+        vec2 conePixelCenter = projectedCenter.xy / projectedCenter.w; // converting [-1, 1]
+        conePixelCenter = (conePixelCenter*0.5 + 0.5) * u_Resolution; // finding the cone center pixel coord
+
+        // Find the ellipse center
+        vec2 viewCenterXY = viewCenter.xy;
+        float viewXYSize2 = dot(viewCenterXY, viewCenterXY);
+        // H = sqrt(viewXYSize2)
+        // offsetSize = (z^2 * H * OA^2) / (oc^4 - H^2*OA^2)
+        float oa2 = scaledRadius*scaledRadius + oc*oc;
+        float offsetSize = (viewCenter.z*viewCenter.z*oa2)/(oc2*oc2 - viewXYSize2*oa2);
+        // because it will later be divided by H there is no need to multiply at the begining
+        viewCenterXY *= offsetSize;
+        vec4 ellipseProjectedCenter = u_Proj * vec4(viewCenterXY, viewCenter.z, 1.0);
+        vec2 ellipsePixelCenter = ellipseProjectedCenter.xy / ellipseProjectedCenter.w;
+        ellipsePixelCenter = (ellipsePixelCenter*0.5 + 0.5) * u_Resolution;
+
+        // Determine the square region (pixel bounds) to update.
+        // The square is centered at screenCenter and has a half-size = pointSize / 2.0 = semiMajor.
+        ivec2 minCoord = ivec2(floor(ellipsePixelCenter - vec2(semiMajor)));
+        ivec2 maxCoord = ivec2(ceil(ellipsePixelCenter + vec2(semiMajor)));
+        // Clamp to valid screen coordinates.
+        minCoord = clamp(minCoord, ivec2(0), ivec2(u_Resolution.x-1, u_Resolution.y-1));
+        maxCoord = clamp(maxCoord, ivec2(0), ivec2(u_Resolution.x-1, u_Resolution.y-1));
+
+        float viewZOverFocalLength = -viewCenter.z / u_FocalLength;
+        // Fill the square region in the output image.
+        for (int y = minCoord.y; y <= maxCoord.y; ++y) {
+            for (int x = minCoord.x; x <= maxCoord.x; ++x) {
+                // Calculate the pixel offset from the defined center
+                vec2 pixelOffset = vec2(x, y) - conePixelCenter;
+                // (pixelOffset / u_FocalLength) * viewZ;
+                vec2 worldOffset = pixelOffset * viewZOverFocalLength;
+                vec3 viewDir = (sphereCenter + worldOffset.x * u_CamRight + worldOffset.y * u_CamUp) - u_CamPos;
+
+                float a = dot(viewDir, viewDir);
+                float b = 2.0 * dot(viewDir, centerToCam);
+                float c = dot(centerToCam, centerToCam) - radius*radius;
+                float discriminant = b*b - 4.0*a*c;
+
+                if (discriminant < 0.0){
+                    continue; // don't need to render this pixel
+                }
+                float t1 = (-b - sqrt(discriminant)) / (2.0 * a);
+                vec3 fragPos = u_CamPos + t1 * viewDir;
+                float fragDist = distance(fragPos, u_CamPos);
+                float depth = fragDist * u_OneOverFarDistance;
+
+                if (depth > 1.0){ // outside of view frustum 
+                    continue;
+                }
+                
+                int currDepthInt = floatBitsToInt(depth);
+                ivec2 fragPosition = ivec2(x, y);
+                // store depth if it's smaller than existing one
+                int prevDepthInt = imageAtomicMin(gDepth, fragPosition, currDepthInt);
+
+                // Fill the G buffers if depth is curr depth is smaller
+                if (currDepthInt < prevDepthInt) {
+                    vec3 fragNormal = (fragPos - sphereCenter) / radius;
+                    // store gPosition gNormal gIndex gDepth (depth is stored in image atomic min)
+                    imageStore(gPosition, fragPosition, vec4(fragPos, fragDist)); // position + distance
+                    imageStore(gNormal, fragPosition, vec4(fragNormal, 1.0));
+                    imageStore(gIndex, fragPosition, uvec4(spIndex, 0,0,0));
+                }
+            }
+        }
+    }
+    else if (pointSize <= u_MaxPointSize){ // render in point shader
+        uint pointIndex = atomicCounterIncrement(pointCounter);
+        if (pointIndex < pointIDs.length()){
+            pointIDs[pointIndex].ID = spIndex;
+            pointIDs[pointIndex].ScaledRadius = scaledRadius;
+            pointIDs[pointIndex].PointSize = pointSize;
+        }
+    }
+    else { // render in quad shader
+        uint quadIndex = atomicCounterIncrement(quadCounter);
+        if (quadIndex < quadIDs.length()){
+            quadIDs[quadIndex].ID = spIndex;
+            quadIDs[quadIndex].ScaledRadius = scaledRadius;
+        }
+    }
+} // end of if
+} // end of main
+
+// frustum culling
+bool IsSphereVisible(vec3 pos, float radius){
+    for (int i = 0; i < 6; i++){
+        // Calculate signed distance from sphere center to the plane
+        float dist = dot(pos, u_FrustumPlanes[i].xyz) + u_FrustumPlanes[i].w;
+
+        // If the sphere is entirely behind the plane, it's not visible
+        if (dist < -radius * 2.3) {
+            return false;
+        }
+    }
+    return true;
+}

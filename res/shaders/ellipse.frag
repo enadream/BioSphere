@@ -9,7 +9,6 @@ in SphereData {
     vec2 pixelCenter; // pixel center of the sphere
     float viewZOverFocalLength; // viewZ / focalLength 
     float radius; // r
-    float pointSize; // gl point size
 } v_Sphere;
 
 struct DirectLight {
