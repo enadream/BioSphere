@@ -5,7 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <math.h>
 #include <vector>
-
+#include <cstring>    // For memcpy
 #include <iostream>
 #include <sstream>
 
@@ -27,6 +27,7 @@
 #include "gl_buffer.hpp"
 #include "frame_buffer.hpp"
 #include "compute_handler.hpp"
+#include "memory_manager.hpp"
 
 static Camera * m_MainCamera;
 
@@ -35,8 +36,6 @@ static double lastX, lastY;
 
 constexpr float sphereRadius = 0.5f;
 
-
-static glm::mat4 lookToCamera(const glm::vec3 &quad_pos, float radius, float &scale_factor);
 void frame_buffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow* window);
@@ -97,13 +96,14 @@ int main(){
     glViewport(0, 0, 800, 600);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     // Depth testing
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     //glEnable(GL_CULL_FACE);
     // blending
     //glEnable(GL_BLEND);
     //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     glEnable(GL_PROGRAM_POINT_SIZE);
 
     glfwSetFramebufferSizeCallback(window, frame_buffer_size_callback);
@@ -112,62 +112,88 @@ int main(){
 
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkHolder chunkHolder(100 * CHUNK_SIZE, sphereRadius); // total amount of chunk is x*x
-    cam.SetPositionX(0.05 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
+    ChunkHolder chunkHolder(100, sphereRadius); // total amount of chunk is x*x
+    cam.SetPositionX(0.05 + chunkHolder.GetWidthChunkAmount()*CHUNK_SIZE*0.5*sphereRadius);
     cam.SetPositionY(150.0f);
-    cam.SetPositionZ(0.07 + chunkHolder.GetWidth()*sphereRadius / 2.0f);
+    cam.SetPositionZ(0.07 + chunkHolder.GetWidthChunkAmount()*CHUNK_SIZE*0.5*sphereRadius);
 
-    printf("Total number of spheres: %llu\n", chunkHolder.spheres.size());
+    printf("Total number of spheres: %u\n", chunkHolder.GetTotalNumOfSpheres());
     ComputeConfig::PrintLimits();
     
     ComputeConfig computeConfig;
-    computeConfig.CalculateSize(chunkHolder.spheres.size(), 32);
+    computeConfig.CalculateSize(chunkHolder.GetTotalNumOfSpheres(), 32);
     computeConfig.PrintSizes();
+
+    // buffer memory manager
+    MemoryManager memoryManager(1.2 * chunkHolder.GetTotalNumOfSpheres() * sizeof(Sphere));
 
     // load data to the buffer
     VertexArray sphereVAO;
-    sphereVAO.GenVertexBuffer(sizeof(Sphere)*chunkHolder.spheres.size(), chunkHolder.spheres.data(), chunkHolder.spheres.size(), GL_STATIC_DRAW);
+    sphereVAO.m_VertBuffer.GenVertexBuffer(memoryManager.GetTotalSize(), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_STATIC_DRAW);
     sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(Sphere), 0);
-    // Bind vertex buffer as SSBO
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereVAO.m_VertBuffer.GetID());
-
-    // compute shader
-    ShaderProgram drawCompute;
-    drawCompute.AttachShader(GL_COMPUTE_SHADER, "res/shaders/draw_ellipse.comp");
-    drawCompute.LinkShaders();
-    // atomic counters
-    Buffer atomicCounters(GL_ATOMIC_COUNTER_BUFFER);
-    atomicCounters.GenBuffer(2 * sizeof(uint32_t), nullptr, 2, GL_DYNAMIC_DRAW);
-    glBindBufferBase(atomicCounters.GetType(), 1, atomicCounters.GetID());
-    // SSBOs
-    Buffer spherePoints(GL_SHADER_STORAGE_BUFFER);
-    spherePoints.GenBuffer(12 * 1000, nullptr, 1000, GL_DYNAMIC_DRAW);
-    glBindBufferBase(spherePoints.GetType(), 2, spherePoints.GetID());
-    Buffer sphereQuads(GL_SHADER_STORAGE_BUFFER);
-    sphereQuads.GenBuffer(8 * 1000, nullptr, 1000, GL_DYNAMIC_DRAW);
-    glBindBufferBase(sphereQuads.GetType(), 3, sphereQuads.GetID());
-
-    /////////// Textures ///////////
-    Texture gPosition(GL_TEXTURE_2D, TextureType::UNDEFINED);
-    create_texture_2D(gPosition, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 0, GL_READ_WRITE);
-
-    Texture gNormal(GL_TEXTURE_2D, TextureType::UNDEFINED);
-    create_texture_2D(gNormal, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 1, GL_READ_WRITE);
-
-    Texture gIndex(GL_TEXTURE_2D, TextureType::UNDEFINED);
-    create_texture_2D(gIndex, GL_R32UI, cam.GetWidth(), cam.GetHeight(), 2, GL_READ_WRITE);
-
-    Texture gDepth(GL_TEXTURE_2D, TextureType::UNDEFINED);
-    create_texture_2D(gDepth, GL_R32I, cam.GetWidth(), cam.GetHeight(), 3, GL_READ_WRITE);
+    
+    sphereVAO.Bind();
+    for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+        uint32_t offset = 0;
+        uint32_t byte_size = chunkHolder.chunks[i].spheres.size()*sizeof(Sphere);
+        memoryManager.Allocate(byte_size, offset);
+        // to find the vertex offset, we need to divide the byte offset by the vertex size
+        chunkHolder.chunks[i].bufferVertexOffset = offset / sizeof(Sphere);
+        glBufferSubData(GL_ARRAY_BUFFER, offset, byte_size, chunkHolder.chunks[i].spheres.data());
+    }
 
 
-    // ShaderProgram pointProgram("res/shaders/ellipse.vert", "res/shaders/ellipse.frag");
-    // // directional light
-    // pointProgram.Use();
-    // pointProgram.SetUniform3fv("u_DirLight.direction", glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f)));
-    // pointProgram.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
-    // pointProgram.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
-    // pointProgram.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
+    // uint32_t sphereOffsetBytes = 0;
+    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+    //     glBufferSubData(GL_ARRAY_BUFFER, sphereOffsetBytes, chunkHolder.chunks[i].spheres.size()*sizeof(Sphere),
+    //         chunkHolder.chunks[i].spheres.data());
+    //     sphereOffsetBytes += chunkHolder.chunks[i].spheres.size() * sizeof(Sphere);
+    // }
+    
+    // sphereVAO.m_VertBuffer.GenVertexBufferStorage(memoryManager.GetTotalSize(), nullptr, chunkHolder.GetTotalNumOfSpheres(),
+    //     GL_DYNAMIC_STORAGE_BIT);
+    // //sphereVAO.m_VertBuffer.GenPersistentBuffer(0, memoryManager.GetTotalSize(), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    // sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(Sphere), 0);
+
+    // sphereVAO.Bind();
+    // uint32_t sphereOffsetBytes = 0;
+    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+    //     glBufferSubData(GL_ARRAY_BUFFER, sphereOffsetBytes, chunkHolder.chunks[i].spheres.size()*sizeof(Sphere),
+    //         chunkHolder.chunks[i].spheres.data());
+    //     sphereOffsetBytes += chunkHolder.chunks[i].spheres.size() * sizeof(Sphere);
+    // }
+
+    // // load each chunk data
+    // sphereVAO.m_VertBuffer.Bind();
+    // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+    //     uint32_t offset = 0;
+    //     uint32_t byte_size = chunkHolder.chunks[i].spheres.size()*sizeof(Sphere);
+    //     memoryManager.Allocate(byte_size, offset);
+    //     // to find the vertex offset, we need to divide the byte offset by the vertex size
+    //     chunkHolder.chunks[i].bufferVertexOffset = offset / sizeof(Sphere);
+    //     // Copy chunk data into the persistent mapped buffer at the current offset.
+    //     memcpy(static_cast<char*>(sphereVAO.m_VertBuffer.GetMap())+offset, chunkHolder.chunks[i].spheres.data(), byte_size);
+    // }
+    
+
+    // sphereVAO.Unbind();
+    // sphereVAO.m_VertBuffer.Unbind();
+
+    // // multidraw command buffer
+    Buffer drawCommandBuffer(GL_DRAW_INDIRECT_BUFFER);
+    drawCommandBuffer.GenBuffer(chunkHolder.GetTotalChunkAmount()*sizeof(DrawArraysIndirectCommand), nullptr, 0, GL_DYNAMIC_DRAW);
+    // Buffer drawCommandBuffer(GL_DRAW_INDIRECT_BUFFER);
+    // drawCommandBuffer.GenBufferStorage(chunkHolder.GetTotalChunkAmount()*sizeof(DrawArraysIndirectCommand), nullptr, 
+    //     chunkHolder.GetTotalChunkAmount(), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    // drawCommandBuffer.GenPersistentBuffer(0, drawCommandBuffer.GetSize(), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+
+    ShaderProgram atomProgram("res/shaders/atom.vert", "res/shaders/atom.frag");
+    // directional light
+    atomProgram.Use();
+    atomProgram.SetUniform3fv("u_DirLight.direction", glm::normalize(glm::vec3(1.0f, -1.0f, 1.0f)));
+    atomProgram.SetUniform3fv("u_DirLight.ambient", 0.5f * glm::vec3(1.0f));
+    atomProgram.SetUniform3fv("u_DirLight.diffuse",  0.5f * glm::vec3(1.0f));
+    atomProgram.SetUniform3fv("u_DirLight.specular", 0.5f * glm::vec3(1.0f));
 
 
     std::string title = "BioSphere Evolution : ";
@@ -188,6 +214,11 @@ int main(){
     CubeTexture sphereTex;
     sphereTex.LoadCubeMap(spFaces);
 
+    VertexArray box;
+    box.GenVertexBuffer(sizeof(s_cubeVertonly), s_cubeVertonly, 36, GL_STATIC_DRAW);
+    box.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), 0);
+    ShaderProgram boxShader("res/shaders/bound_box.vert", "res/shaders/bound_box.frag");
+
     // MATRICES
     glm::mat4 proj, view, projView;
 
@@ -195,16 +226,12 @@ int main(){
     float pointSizeRange[2];
     glGetFloatv(GL_POINT_SIZE_RANGE, pointSizeRange); // min and max range 
 
-    // rendering z buffer for testing
-    ShaderProgram simpleQuadPr("res/shaders/quad.vert", "res/shaders/quad.frag");
-    VertexArray simpleQuadVA;
-    simpleQuadVA.GenVertexBuffer(sizeof(s_strip_quad), s_strip_quad, 4, GL_STATIC_DRAW);
-    simpleQuadVA.InsertLayout(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), 0);
-    simpleQuadVA.InsertLayout(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), 3*sizeof(float));
+    std::vector<DrawArraysIndirectCommand> drawCommands;
+    drawCommands.reserve(chunkHolder.GetTotalChunkAmount());
 
     while(!glfwWindowShouldClose(window)){
         // clear buffer
-        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // delta time calculation
         static float lastFrameTime;
@@ -233,63 +260,82 @@ int main(){
         // calculate view frustum
         cam.CalculateFrustum();
 
-        // check texture size
-        if (gPosition.GetWidth() != cam.GetWidth()){
-            // free old space
-            gPosition.Free();
-            gPosition.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
-            gNormal.Free();
-            gNormal.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
-            gIndex.Free();
-            gIndex.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
-            gDepth.Free();
-            gDepth.Generate(GL_TEXTURE_2D, TextureType::UNDEFINED);
-
-            // reallocate
-            create_texture_2D(gPosition, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 0, GL_READ_WRITE);
-            create_texture_2D(gNormal, GL_RGBA32F, cam.GetWidth(), cam.GetHeight(), 1, GL_READ_WRITE);
-            create_texture_2D(gIndex, GL_R32UI, cam.GetWidth(), cam.GetHeight(), 2, GL_READ_WRITE);
-            create_texture_2D(gDepth, GL_R32I, cam.GetWidth(), cam.GetHeight(), 3, GL_READ_WRITE);
-        }
-        // reset atomic counters
-        uint32_t counterValues[2] = {0, 0};
-        atomicCounters.Bind();
-        glBufferSubData(atomicCounters.GetType(), 0, sizeof(counterValues), counterValues);
-
-        // reset textures
-        // the existing image will be check based on depth value, if depth is 2.0 which means the pixel should be all zero
-        const int32_t clearVal = glm::floatBitsToInt(2.0f);
-        glClearTexImage(gDepth.GetID(), 0, GL_RED_INTEGER, GL_INT, &clearVal);
-
-        const float clearColorRGBA[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-        glClearTexImage(gNormal.GetID(), 0, GL_RGBA, GL_FLOAT, &clearColorRGBA);
-    
+       
         float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
         float oneOverDist = 1.0 / cam.GetFar();
         // setting uniforms
-        drawCompute.Use();
-        drawCompute.SetUniformMatrix4fv("u_View", view);
-        drawCompute.SetUniformMatrix4fv("u_Proj", proj);
-        drawCompute.SetUniform3fv("u_CamPos", cam.GetPosition());
-        drawCompute.SetUniform3fv("u_CamUp", cam.GetUp());
-        drawCompute.SetUniform3fv("u_CamRight", cam.GetRight());
-        drawCompute.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
+        atomProgram.Use();
+        atomProgram.SetUniformMatrix4fv("u_View", view);
+        atomProgram.SetUniformMatrix4fv("u_Proj", proj);
+        atomProgram.SetUniform3fv("u_CamPos", cam.GetPosition());
+        atomProgram.SetUniform3fv("u_CamUp", cam.GetUp());
+        atomProgram.SetUniform3fv("u_CamRight", cam.GetRight());
+        atomProgram.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
 
-        drawCompute.SetUniform4fv("u_FrustumPlanes", cam.m_Frustum.planes[0], 6);
-        drawCompute.SetUniform1f("u_MaxPointSize", pointSizeRange[1]);
-        drawCompute.SetUniform1f("u_OneOverFarDistance", oneOverDist);
-        drawCompute.SetUniform1f("u_FocalLength", focalLenght);
-        drawCompute.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
+        atomProgram.SetUniform4fv("u_FrustumPlanes", cam.m_Frustum.planes[0], 6);
+        atomProgram.SetUniform1f("u_MaxPointSize", pointSizeRange[1]);
+        atomProgram.SetUniform1f("u_OneOverFarDistance", oneOverDist);
+        atomProgram.SetUniform1f("u_FocalLength", focalLenght);
 
-        glDispatchCompute(computeConfig.DispatchSize.x, computeConfig.DispatchSize.y, computeConfig.DispatchSize.z);
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+        
+        // accomplish frustum culling
+        drawCommands.clear();
+        for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+            if (chunkHolder.chunks[i].boundBox.IsOnFrustum(cam.m_Frustum)){
+                drawCommands.emplace_back(chunkHolder.chunks[i].spheres.size(), 1, chunkHolder.chunks[i].bufferVertexOffset, 0);
 
-        // test draw
-        simpleQuadPr.Use();
-        simpleQuadPr.SetUniform1i("u_Tex", 1);
-        gNormal.BindTo(1);
-        simpleQuadVA.Bind();
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, simpleQuadVA.m_VertBuffer.GetVertAmount());
+                // DrawArraysIndirectCommand commandBuff;
+                // commandBuff.count = chunkHolder.chunks[i].spheres.size();
+                // commandBuff.first = chunkHolder.chunks[i].bufferVertexOffset;
+                // //  we don't use instanced rendering
+                // commandBuff.instanceCount = 1;
+                // commandBuff.baseInstance = 0;
+                // // copy value to the buffer
+                // uint32_t byteOffset = drawAmount*sizeof(DrawArraysIndirectCommand);
+                // memcpy(static_cast<char*>(drawCommandBuffer.GetMap())+byteOffset, &commandBuff, sizeof(DrawArraysIndirectCommand));
+                // drawAmount++;
+            }
+        }
+
+        drawCommandBuffer.Bind();
+        // copy to indirect buffer
+        glBufferSubData(drawCommandBuffer.GetType(), 0, drawCommands.size()*sizeof(DrawArraysIndirectCommand), drawCommands.data());
+        sphereVAO.Bind();
+        glMultiDrawArraysIndirect(GL_POINTS, (void*)0, drawCommands.size(), 0);
+        //glDrawArrays(GL_POINTS, 0, chunkHolder.GetTotalNumOfSpheres());
+
+        // boxShader.Use();
+        // box.Bind();
+        // boxShader.SetUniformMatrix4fv("u_ProjView", projView);
+
+        // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
+        //     glm::mat4 modelBoundBox = glm::mat4(1.0f);
+        //     modelBoundBox = glm::translate(modelBoundBox, chunkHolder.chunks[i].boundBox.GetCenter());
+        //     modelBoundBox = glm::scale(modelBoundBox, chunkHolder.chunks[i].boundBox.GetSize());
+        //     boxShader.SetUniformMatrix4fv("u_Model", modelBoundBox);
+        //     glDrawArrays(GL_TRIANGLES, 0, box.m_VertBuffer.GetVertAmount());
+        // }
+        
+
+        // // After updating your persistently mapped indirect buffer:
+        // GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+
+        // // Wait for the GPU to catch up.
+        // // Here we block until the fence is signaled (with a 1-second timeout).
+        // GLenum waitResult = glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000);
+        // if (waitResult == GL_ALREADY_SIGNALED || waitResult == GL_CONDITION_SATISFIED) {
+        //     // Now it's safe to issue the draw call.
+        //     sphereVAO.Bind();
+        //     glMultiDrawArraysIndirect(GL_POINTS, (void*)0, drawAmount, 0);
+        // } else {
+        //     // Handle the error or timeout (e.g., log, skip frame, etc.)
+        //     printf("[ERROR]: GPU sync timed out or failed.\n");
+        // }
+        // // Delete the fence.
+        // glDeleteSync(fence);
+        
+        
+
 
         // Use uniform buffers for uniforms !!!
         // 3 stage render is needed !!!
@@ -299,59 +345,6 @@ int main(){
         // Step 2 : render objects using gl draw points
         // Step 3 : render big spheres using gl draw instanced
 
-        // // focal length in pixel size, so the focalLength in how many pixel size !!!
-        // float focalLenght = (float)cam.GetHeight() / (2.0 * glm::tan(cam.GetFovYRad() * 0.5));
-        // pointProgram.Use();
-        // pointProgram.SetUniformMatrix4fv("u_Proj", proj);
-        // pointProgram.SetUniformMatrix4fv("u_View", view);
-        // pointProgram.SetUniformMatrix4fv("u_ProjView", projView);
-        // pointProgram.SetUniformMatrix4fv("u_InvProj", glm::inverse(proj));
-        // pointProgram.SetUniformMatrix4fv("u_InvViewMatrix", glm::inverse(view));
-
-        // pointProgram.SetUniformMatrix3fv("u_CamRotation", glm::transpose(glm::mat3(view)));
-
-        // pointProgram.SetUniform4fv("u_FrustumPlanes", cam.m_Frustum.planes[0], 6);
-        // pointProgram.SetUniform1f("u_MaxDiameter", pointSizeRange[1]);
-        // pointProgram.SetUniform2iv("u_Resolution", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
-        // pointProgram.SetUniform3fv("u_CamPos", cam.GetPosition());
-        // pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
-        // pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
-        // pointProgram.SetUniform3fv("u_CamForw", cam.GetFront());
-        // pointProgram.SetUniform1f("u_FocalLength", focalLenght);
-        // pointProgram.SetUniform1f("u_FarDistance", cam.GetFar());
-        // pointProgram.SetUniform1f("u_NearDist", cam.GetNear());
-        // pointProgram.SetUniform1i("u_Texture", 1);
-
-
-
-        // glm::vec2 halfTan;
-        // halfTan.y = glm::tan(cam.GetFovYRad()*0.5);
-        // halfTan.x = halfTan.y * cam.GetAspectRatio();
-        // pointProgram.SetUniform2fv("u_TanHalfFOV", halfTan);
-        //pointProgram.SetUniform2fv("u_HalfOfFOV", glm::vec2((cam.GetFovYRad()*0.5)*cam.GetAspectRatio(), cam.GetFovYRad()*0.5));
-
-        //pointProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
-
-        //pointProgram.SetUniformMatrix4fv("invViewMatrix", glm::inverse(view));
-
-        // pointProgram.SetUniform3fv("u_CameraFront", cam.GetFront());
-        // pointProgram.SetUniform3fv("u_CamUp", cam.GetUp());
-        // pointProgram.SetUniform3fv("u_CamRight", cam.GetRight());
-        //sphereTex.BindTo(1);
-        // sphereVAO.Bind();
-        // glDrawArrays(GL_POINTS, 0, sphereVAO.m_VertBuffer.GetVertAmount());
-
-        // rastProgram.Use();
-        // rastProgram.SetUniformMatrix4fv("u_View", projView);
-        // rastProgram.SetUniformMatrix4fv("u_View", view);
-        // rastProgram.SetUniform2iv("u_ScreenSize", glm::ivec2(cam.GetWidth(), cam.GetHeight()));
-        
-        // rastProgram.SetUniform1f("u_FocalLength", focalLenght);
-        // rastProgram.SetUniform1f("u_Near", cam.GetNear());
-        // rastProgram.SetUniform1f("u_Far", cam.GetFar());
-        // rastProgram.SetUniform1ui("u_TotalNumOfSpheres", chunkHolder.spheres.size());
-        // rastProgram.SetUniform4fv("u_frustumPlanes", cam.m_Frustum.planes[0], 6);
-        
 
         
 

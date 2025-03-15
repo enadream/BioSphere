@@ -23,15 +23,11 @@ uniform vec3 u_CamPos;
 uniform vec3 u_CamUp;
 uniform vec3 u_CamRight;
 uniform vec3 u_CamForw;
-uniform mat4 u_InvProj;
-uniform mat4 u_InvViewMatrix;
-uniform mat3 u_CamRotation;
+
 uniform ivec2 u_Resolution;
-//uniform vec2 u_Scale;  // vec2(tan(uFOV/2)*aspect, tan(uFOV/2)) computed on CPU
-uniform vec2 u_TanHalfFOV; // x is the horizontal half fov, y is the vertical fov
 
 uniform float u_FocalLength;
-uniform float u_FarDistance;
+uniform float u_OneOverFarDistance;
 uniform samplerCube u_Texture;
 uniform DirectLight u_DirLight;
 
@@ -94,7 +90,7 @@ void main(){
 
     //viewDir = -normalize(viewDir);
     //vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, viewDir, fragPos);
-    gl_FragDepth = distance(fragPos, u_CamPos) / u_FarDistance;
+    gl_FragDepth = distance(fragPos, u_CamPos) * u_OneOverFarDistance;
 
     FragColor = vec4(fragNormal, 1.0);
 }

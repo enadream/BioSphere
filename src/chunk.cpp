@@ -1,181 +1,113 @@
 #include "chunk.hpp"
 
+Chunk::Chunk(const int32_t x, const int32_t z) : startPosition(x, z), bufferVertexOffset(0){}
 
-ChunkHolder::ChunkHolder(int32_t width, float sphere_radius) : m_Width(width), sphereRadius(sphere_radius) {
-    generateHeightMap();
-    generateSpheres();
-}
-
-void ChunkHolder::generateSpheres() {
-    int32_t z_offset = 1;
-    int32_t x_offset = 1;
-
-    spheres.reserve(m_Width * m_Width * 4);
-    for (uint32_t i = 0; i < m_Width; i++){
-        // process chunks row by row
-        for (uint32_t j = 0; j < m_Width; j++){
-            generateSphere(j+x_offset, i+z_offset);
-        }
-    }
-}
-
-void ChunkHolder::generateSphere(const int32_t x_pos, const int32_t z_pos) {
-    constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
-        {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
-
-
-    int16_t yValue = heightMap[z_pos][x_pos];
-
-    if ((x_pos+z_pos)%2 == 1){
-        return;
-        
-        // check if 4 neighbour if they have same hight value then you don't need to append this sphere
-        int16_t hightLevel = heightMap[z_pos+neighbs[0][0]][x_pos+neighbs[0][1]];
-        bool sameHight = true;
-
-        for (uint32_t k = 1; k < 4; k++){
-            if (hightLevel != heightMap[z_pos+neighbs[k][0]][x_pos+neighbs[k][1]]){
-                sameHight = false;
-                break;
-            }
-        }
-        // if (sameHight)
-        //     chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
-        return;
-    }
-    
-    spheres.emplace_back(x_pos*sphereRadius, yValue*sphereRadius, z_pos*sphereRadius, sphereRadius);
-
-    // check 8 neighbour find the highest difference , [z][x]
-    int16_t maxDiff = 0;
-    for (int16_t k = 0; k < 8; k++){
-        int16_t difference = yValue - heightMap[z_pos+neighbs[k][0]][x_pos+neighbs[k][1]];
-        if (difference > maxDiff)
-            maxDiff = difference;
-    }
-
-    // if difference bigger than sphereRadius create more spheres to fill the gap
-    for (int16_t f = 2; f <= maxDiff; f += 2){
-        int32_t fillY = yValue - f;
-        spheres.emplace_back(x_pos*sphereRadius, fillY*sphereRadius, z_pos*sphereRadius, sphereRadius);
-    }
-}
-
-// void ChunkHolder::generateChunks() {
-//     uint32_t z_offset = 1;
-//     uint32_t x_offset = 1;
-
-//     chunks.reserve(chunkAmount * chunkAmount);
-//     for (uint32_t i = 0; i < chunkAmount; i++){
-//         // process chunks row by row
-//         for (uint32_t j = 0; j < chunkAmount; j++){
-//             chunks.emplace_back();
-//             // generate last appended chunk
-//             generateChunk(z_offset, x_offset, chunks.size()-1);
-//             // increase x offset
-//             x_offset += CHUNK_SIZE;
-//         }
-//         x_offset = 1;
-//         z_offset += CHUNK_SIZE;
-//     }
-// }
-
-// void ChunkHolder::generateChunk(const int32_t z_off, const int32_t x_off, uint32_t chunk_id) {
-//     chunks[chunk_id].m_ChunkInfo.offset = totalNumOfSpheres;
-//     // set chunks position data // y means z axis
-//     chunks[chunk_id].m_ChunkInfo.pos.x = x_off;
-//     chunks[chunk_id].m_ChunkInfo.pos.y = z_off;
-//     // set bounding box, because these are origins of spheres I need to add
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.z = z_off*sphereRadius - sphereRadius;
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.z = (z_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.x = x_off*sphereRadius - sphereRadius;
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.x = (x_off+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
-//     // set the y value to the first value
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = heightMap[z_off][x_off]*sphereRadius - sphereRadius;
-//     chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y = heightMap[z_off][x_off]*sphereRadius + sphereRadius;
-
-
-//     for (uint32_t i = z_off; i < z_off+CHUNK_SIZE; i++){
-//         uint8_t zValue = i-z_off;
-//         for (uint32_t j = x_off; j < x_off+CHUNK_SIZE; j++){
-//             constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
-//                 {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
-
-//             uint8_t xValue = j-x_off;
-//             int16_t yValue = heightMap[i][j];
-
-//             if ((i+j)%2 == 1){
-//                 continue;
-                
-//                 // check if 4 neighbour if they have same hight value then you don't need to append this sphere
-//                 int16_t hightLevel = heightMap[i+neighbs[0][0]][j+neighbs[0][1]];
-//                 bool sameHight = true;
-
-//                 for (uint32_t k = 1; k < 4; k++){
-//                     if (hightLevel != heightMap[i+neighbs[k][0]][j+neighbs[k][1]]){
-//                         sameHight = false;
-//                         break;
-//                     }
-//                 }
-//                 if (sameHight)
-//                     chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
-//                 continue;
-//             }
-            
-//             chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
-//             chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y = glm::max(yValue*sphereRadius + sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y);
-//             chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(yValue*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
-
-//             // check 8 neighbour find the highest difference , [z][x]
-//             int16_t maxDiff = 0;
-//             for (int16_t k = 0; k < 8; k++){
-//                 int16_t difference = yValue - heightMap[i+neighbs[k][0]][j+neighbs[k][1]];
-//                 if (difference > maxDiff)
-//                     maxDiff = difference;
-//             }
-
-//             // if difference bigger than sphereRadius create more spheres to fill the gap
-//             for (int16_t f = 2; f <= maxDiff; f += 2){
-//                 int16_t fillY = yValue - f;
-//                 chunks[chunk_id].m_Spheres.emplace_back(xValue, fillY, zValue);
-//             }
-
-//             // check minimum y value again
-//             int16_t fillY = yValue - (maxDiff/2)*2;
-//             chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(fillY*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
-//         }
-//     }
-//     // set the size of the chunk info
-//     chunks[chunk_id].m_ChunkInfo.size = chunks[chunk_id].m_Spheres.size();
-//     // add total number of chunks
-//     totalNumOfSpheres += chunks[chunk_id].m_Spheres.size();
-// }
-
-void ChunkHolder::generateHeightMap() {
+ChunkHolder::ChunkHolder(uint32_t chunk_am, float sphere_radius) : chunkAmount(chunk_am), sphereRadius(sphere_radius), totalNumOfSpheres(0) {
     // init noise
     initNoise();
+    generateChunks();
+}
 
-    const int32_t terrainX = m_Width + 2; 
-    const int32_t terrainZ = m_Width + 2;
+void ChunkHolder::generateChunks() {
+    // start position of the chunk
+    ChunkPos chunkPos(0, 0), startOffset(0, 0);
 
-    heightMap.reserve(terrainZ);
+    chunks.reserve(chunkAmount * chunkAmount);
+    for (uint32_t i = 0; i < chunkAmount; i++){
+        // process chunks row by row
+        for (uint32_t j = 0; j < chunkAmount; j++){
+            // set the chunk value
+            chunkPos.z = i*CHUNK_SIZE + startOffset.z;
+            chunkPos.x = j*CHUNK_SIZE + startOffset.x;
+            // generate height map for chunk
+            generateHeightMapForChunk(chunkPos);
+            // create a chunk
+            chunks.emplace_back(chunkPos.x, chunkPos.z);
+            // fill the last chunk
+            generateChunk(chunks.size()-1);
+        }
+    }
+}
+
+void ChunkHolder::generateChunk(uint32_t chunk_id) {
+    // set bounding box, because these are origins of spheres I need to add and subtract the radius to find bb in x and z axes
+    chunks[chunk_id].boundBox.m_Min.z = chunks[chunk_id].startPosition.z*sphereRadius - sphereRadius;
+    chunks[chunk_id].boundBox.m_Max.z = (chunks[chunk_id].startPosition.z+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
+    chunks[chunk_id].boundBox.m_Min.x = chunks[chunk_id].startPosition.x*sphereRadius - sphereRadius;
+    chunks[chunk_id].boundBox.m_Max.x = (chunks[chunk_id].startPosition.x+CHUNK_SIZE-1)*sphereRadius + sphereRadius;
+    // set the y value to the first value, this value can be updated with each sphere
+    chunks[chunk_id].boundBox.m_Min.y = chunkHeightMap.getHeight(0,0)*sphereRadius - sphereRadius;
+    chunks[chunk_id].boundBox.m_Max.y = chunkHeightMap.getHeight(0,0)*sphereRadius + sphereRadius;
+
+    for (int32_t z = 0; z < CHUNK_SIZE; z++){ // iterate over z axis
+        float zValue = sphereRadius * (z + chunks[chunk_id].startPosition.z);
+        for (int32_t x = 0; x < CHUNK_SIZE; x++){ // iterate over x axis
+            constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
+                {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+            float xValue = sphereRadius * (x + chunks[chunk_id].startPosition.x);
+            int16_t discreteY = chunkHeightMap.getHeight(z, x);
+            float yValue = sphereRadius * discreteY;
+            
+            if ((z+x)%2 == 1){ // od layer
+                // check if 4 neighbour if they have same hight value then you don't need to append this sphere
+                int16_t hightLevel = chunkHeightMap.getHeight(z+neighbs[0][0], x+neighbs[0][1]);
+                bool sameHight = true;
+
+                for (uint32_t k = 1; k < 4; k++){
+                    if (hightLevel != chunkHeightMap.getHeight(z+neighbs[k][0], x+neighbs[k][1])){
+                        sameHight = false;
+                        break;
+                    }
+                }
+                if (sameHight)
+                    continue;
+            }
+            
+            chunks[chunk_id].spheres.emplace_back(xValue, yValue, zValue, sphereRadius);
+            chunks[chunk_id].boundBox.m_Max.y = glm::max(yValue + sphereRadius, chunks[chunk_id].boundBox.m_Max.y);
+            chunks[chunk_id].boundBox.m_Min.y = glm::min(yValue - sphereRadius, chunks[chunk_id].boundBox.m_Min.y);
+
+            // check 8 neighbour find the highest difference , [z][x]
+            int32_t maxDiff = 0;
+            for (int16_t k = 0; k < 8; k++){
+                int32_t difference = discreteY - chunkHeightMap.getHeight(z+neighbs[k][0], x+neighbs[k][1]);
+                if (difference > maxDiff)
+                    maxDiff = difference;
+            }
+
+            // if difference bigger than sphereRadius create more spheres to fill the gap
+            for (int16_t f = 2; f <= maxDiff; f += 2){
+                int32_t fillY = discreteY - f;
+                chunks[chunk_id].spheres.emplace_back(xValue, fillY*sphereRadius, zValue, sphereRadius);
+            }
+
+            // check minimum y value again
+            int16_t maxDiscDiff = discreteY - (maxDiff/2)*2; // if max diff has to be multiple of 2
+            chunks[chunk_id].boundBox.m_Min.y = glm::min(maxDiscDiff*sphereRadius - sphereRadius, chunks[chunk_id].boundBox.m_Min.y);
+        }
+    }    
+    // add total number of chunks
+    totalNumOfSpheres += chunks[chunk_id].spheres.size();
+}
+
+void ChunkHolder::generateHeightMapForChunk(const ChunkPos chunk_pos) {
+    // generate [-1+x, x+1] height map
 
     // find terrain discrete hight map
-    for (int32_t i = 0; i < terrainZ; i++){
-        heightMap.emplace_back();
-        heightMap[i].reserve(terrainX);
-        float zValue = i*sphereRadius;
+    for (int32_t z = -1; z < CHUNK_SIZE+1; z++){
+        float zValue = (z+chunk_pos.z)*sphereRadius;
 
-        for (int32_t j = 0; j < terrainX; j++){
-            float xValue = j*sphereRadius;
+        for (int32_t x = -1; x < CHUNK_SIZE+1; x++){
+            float xValue = (x+chunk_pos.x)*sphereRadius;
             float heightValue = getTerrainHeight(xValue, zValue); //getTerrainHeight(xValue, zValue) - yOffset;
             int16_t discreteY = heightValue/sphereRadius;
 
             //int16_t layerOffset = (i+j) % 2;
             //int16_t heightOffset = discreteY % 2;
-            discreteY -= ((i+j) + discreteY) % 2;
-            
-            heightMap[i].push_back(discreteY);
+            discreteY -= ((z+x) + discreteY) % 2;
+            // store the data to the chunk map
+            chunkHeightMap.setHeight(z, x, discreteY);
         }
     }
 }
@@ -244,3 +176,111 @@ void ChunkHolder::initNoise(){
         noise_initialized = true;
     }
 }
+
+
+// for (uint32_t i = z_off; i < z_off+CHUNK_SIZE; i++){
+//     uint8_t zValue = i-z_off;
+//     for (uint32_t j = x_off; j < x_off+CHUNK_SIZE; j++){
+//         constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
+//             {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+//         uint8_t xValue = j-x_off;
+//         int16_t yValue = heightMap[i][j];
+
+//         if ((i+j)%2 == 1){
+//             continue;
+            
+//             // check if 4 neighbour if they have same hight value then you don't need to append this sphere
+//             int16_t hightLevel = heightMap[i+neighbs[0][0]][j+neighbs[0][1]];
+//             bool sameHight = true;
+
+//             for (uint32_t k = 1; k < 4; k++){
+//                 if (hightLevel != heightMap[i+neighbs[k][0]][j+neighbs[k][1]]){
+//                     sameHight = false;
+//                     break;
+//                 }
+//             }
+//             if (sameHight)
+//                 chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
+//             continue;
+//         }
+        
+//         chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
+//         chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y = glm::max(yValue*sphereRadius + sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Max.y);
+//         chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(yValue*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
+
+//         // check 8 neighbour find the highest difference , [z][x]
+//         int16_t maxDiff = 0;
+//         for (int16_t k = 0; k < 8; k++){
+//             int16_t difference = yValue - heightMap[i+neighbs[k][0]][j+neighbs[k][1]];
+//             if (difference > maxDiff)
+//                 maxDiff = difference;
+//         }
+
+//         // if difference bigger than sphereRadius create more spheres to fill the gap
+//         for (int16_t f = 2; f <= maxDiff; f += 2){
+//             int16_t fillY = yValue - f;
+//             chunks[chunk_id].m_Spheres.emplace_back(xValue, fillY, zValue);
+//         }
+
+//         // check minimum y value again
+//         int16_t fillY = yValue - (maxDiff/2)*2;
+//         chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y = glm::min(fillY*sphereRadius - sphereRadius, chunks[chunk_id].m_ChunkInfo.boundBox.m_Min.y);
+//     }
+// }
+
+
+// void ChunkHolder::generateSphere(const int32_t x_pos, const int32_t z_pos) {
+//     constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
+//         {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+
+//     int16_t yValue = heightMap[z_pos][x_pos];
+
+//     if ((x_pos+z_pos)%2 == 1){
+//         return;
+        
+//         // check if 4 neighbour if they have same hight value then you don't need to append this sphere
+//         int16_t hightLevel = heightMap[z_pos+neighbs[0][0]][x_pos+neighbs[0][1]];
+//         bool sameHight = true;
+
+//         for (uint32_t k = 1; k < 4; k++){
+//             if (hightLevel != heightMap[z_pos+neighbs[k][0]][x_pos+neighbs[k][1]]){
+//                 sameHight = false;
+//                 break;
+//             }
+//         }
+//         // if (sameHight)
+//         //     chunks[chunk_id].m_Spheres.emplace_back(xValue, yValue, zValue);
+//         return;
+//     }
+    
+//     spheres.emplace_back(x_pos*sphereRadius, yValue*sphereRadius, z_pos*sphereRadius, sphereRadius);
+
+//     // check 8 neighbour find the highest difference , [z][x]
+//     int16_t maxDiff = 0;
+//     for (int16_t k = 0; k < 8; k++){
+//         int16_t difference = yValue - heightMap[z_pos+neighbs[k][0]][x_pos+neighbs[k][1]];
+//         if (difference > maxDiff)
+//             maxDiff = difference;
+//     }
+
+//     // if difference bigger than sphereRadius create more spheres to fill the gap
+//     for (int16_t f = 2; f <= maxDiff; f += 2){
+//         int32_t fillY = yValue - f;
+//         spheres.emplace_back(x_pos*sphereRadius, fillY*sphereRadius, z_pos*sphereRadius, sphereRadius);
+//     }
+// }
+
+// void ChunkHolder::generateSpheres() {
+//     int32_t z_offset = 1;
+//     int32_t x_offset = 1;
+
+//     spheres.reserve(m_Width * m_Width * 4);
+//     for (uint32_t i = 0; i < m_Width; i++){
+//         // process chunks row by row
+//         for (uint32_t j = 0; j < m_Width; j++){
+//             generateSphere(j+x_offset, i+z_offset);
+//         }
+//     }
+// }
