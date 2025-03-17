@@ -22,7 +22,7 @@
 #include "shader_program.hpp"
 #include "vertex_array.hpp"
 #include "bound_box.hpp"
-#include "chunk.hpp"
+#include "chunk_holder.hpp"
 #include "draw_array_command.hpp"
 #include "gl_buffer.hpp"
 #include "frame_buffer.hpp"
@@ -77,7 +77,7 @@ int main(){
     }
     
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(0); // Vsync
+    glfwSwapInterval(1); // Vsync
 
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -110,9 +110,10 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
+    printf("Sizeof cpu sphere %llu\n", sizeof(GPU_Sphere));
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
-    ChunkHolder chunkHolder(100, sphereRadius); // total amount of chunk is x*x
+    ChunkHolder chunkHolder(20, sphereRadius); // total amount of chunk is x*x
     cam.SetPositionX(0.05 + chunkHolder.GetWidthChunkAmount()*CHUNK_SIZE*0.5*sphereRadius);
     cam.SetPositionY(150.0f);
     cam.SetPositionZ(0.07 + chunkHolder.GetWidthChunkAmount()*CHUNK_SIZE*0.5*sphereRadius);
@@ -276,7 +277,8 @@ int main(){
         atomProgram.SetUniform1f("u_MaxPointSize", pointSizeRange[1]);
         atomProgram.SetUniform1f("u_OneOverFarDistance", oneOverDist);
         atomProgram.SetUniform1f("u_FocalLength", focalLenght);
-
+        atomProgram.SetUniform1i("u_Texture", 1);
+        sphereTex.BindTo(1);
         
         // accomplish frustum culling
         drawCommands.clear();

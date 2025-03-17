@@ -11,10 +11,31 @@
 #include "math/FastNoiseLite.hpp"
 
 // chunks will be square with this value 32*32
-#define CHUNK_SIZE 32
+#define CHUNK_SIZE 16
 // the deepness of indiviual quad 16*16 * 4
 #define CHUNK_QUAD_DEEPNESS 1
 
+struct LightVector { // 3 bytes
+    uint8_t Red;
+    uint8_t Green;
+    uint8_t Blue;
+};
+
+struct CPU_Sphere { // 26 bytes
+    uint16_t ChunkTypeAndFlags; // 4 bits free
+    uint16_t AmbientOcclusion; // 4 bits free
+    LightVector Lights[6]; // 6 direction +- (x,y,z)
+    int16_t discHeight; // discrete height
+    uint16_t posInChunk; // position in chunk 0 - 255
+};
+
+struct GPU_Sphere { // 40 bytes
+    glm::vec4 position; // 16 bytes
+    uint16_t ChunkTypeAndFlags; 
+    uint16_t AmbientOcclusion;
+    LightVector Lights[6]; // 18 (3*6) bytes
+    uint8_t padding;
+};
 
 // uint32 data order is yVal + zOffset + xOffset
 struct Sphere { // 16 bytes
@@ -39,13 +60,8 @@ class Chunk { // 48 bytes
 public:
     Chunk(const int32_t x, const int32_t z);
 
-    // offset values cannot be bigger or equal than CHUNK_SIZE !
-    // inline std::vector<Sphere>& GetCell(uint8_t x_off, uint8_t z_off) {
-    //     return m_Grid[z_off*CHUNK_SIZE + x_off]; 
-    // }
-
 public:
-    //std::array<std::vector<Sphere>, CHUNK_SIZE*CHUNK_SIZE> m_Grid;
+
     std::vector<Sphere> spheres; // 24 bytes
     ChunkPos startPosition; // start position of the chunk x and z
     BoundBox boundBox; // 24 bytes
@@ -80,50 +96,6 @@ private:
     int16_t *HeightMap; // 2D int16_t map
 };
 
-class ChunkHolder {
-public: // functions
-    ChunkHolder(uint32_t chunk_am, float sphere_radius);
-    
-    inline uint32_t GetWidthChunkAmount() {
-        return chunkAmount;
-    }
-    inline uint32_t GetTotalChunkAmount() {
-        return chunkAmount * chunkAmount;
-    }
-    inline uint32_t GetTotalNumOfSpheres(){
-        return totalNumOfSpheres;
-    }
-    inline float GetSphereRadius(){
-        return sphereRadius;
-    }
-    inline Chunk& GetChunk(uint32_t x_off, uint32_t z_off){
-        return chunks[z_off*chunkAmount + x_off];
-    }
-
-public: // variables
-    std::vector<Chunk> chunks;
-    //std::vector<Sphere> spheres;
-
-private: // variables
-    HeightMapChunk chunkHeightMap;
-    uint32_t chunkAmount; //  total chunk size is chunkSize * chunkSize
-    uint32_t totalNumOfSpheres;
-    float sphereRadius;
-
-    // noise variables
-    FastNoiseLite base_noise;
-    FastNoiseLite detail_noise;
-    FastNoiseLite mountain_noise;
-    FastNoiseLite terrain_mask;
-    bool noise_initialized = false;
-private: // functions
-    void generateChunks();
-    void generateChunk(uint32_t chunk_id);
-    void generateHeightMapForChunk(const ChunkPos chunk_pos);
-
-    void initNoise();
-    float getTerrainHeight(float x, float z);
-};
 
 
 

@@ -56,9 +56,9 @@ void main() {
     vec3 fragNormal = (fragPos - v_Sphere.center) / v_Sphere.radius;
 
     gl_FragDepth = distance(fragPos, u_CamPos) * u_OneOverFarDistance;
-    vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, -normalize(camToFrag), fragPos);
+    //vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, -normalize(camToFrag), fragPos);
 
-    FragColor = vec4(fragColor, 1.0);
+    FragColor = vec4(fragNormal, 1.0);
 }
 
 
@@ -80,7 +80,7 @@ vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragReal
     }
 
     // ambient light
-    vec3 textureColor = color; //vec3(texture(u_Texture, normal));
+    vec3 textureColor = vec3(texture(u_Texture, normal));
     result = light.ambient * textureColor;
 
     // diffuse light
