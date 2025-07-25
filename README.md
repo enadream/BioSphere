@@ -43,7 +43,7 @@ To build the BioSphere application, follow these general steps:
 
 1. Clone the repository:
 ```bash
-git clone https://www.google.com/search?q=https://github.com/enadream/BioSphere.git
+git clone https://github.com/enadream/BioSphere.git
 cd BioSphere
 ```
 
