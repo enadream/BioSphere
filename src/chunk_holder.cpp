@@ -1,6 +1,6 @@
 #include "chunk_holder.hpp"
 
-ChunkHolder::ChunkHolder(uint32_t chunk_am, float sphere_radius) : chunkAmount(chunk_am), sphereRadius(sphere_radius), totalNumOfSpheres(0) {
+ChunkHolder::ChunkHolder(uint32_t chunk_am, float sphere_radius) : chunkAmount(chunk_am), totalNumOfSpheres(0), sphereRadius(sphere_radius) {
     // init noise
     initNoise();
     generateChunks();
@@ -25,6 +25,11 @@ void ChunkHolder::generateChunks() {
             generateChunk(chunks.size()-1);
         }
     }
+
+    // calculate ambient occlusions
+    for (uint32_t i = 0; i < chunks.size(); i++){
+        calcAmbientOcc(i);
+    }
 }
 
 void ChunkHolder::generateChunk(uint32_t chunk_id) {
@@ -37,23 +42,20 @@ void ChunkHolder::generateChunk(uint32_t chunk_id) {
     chunks[chunk_id].boundBox.m_Min.y = chunkHeightMap.getHeight(0,0)*sphereRadius - sphereRadius;
     chunks[chunk_id].boundBox.m_Max.y = chunkHeightMap.getHeight(0,0)*sphereRadius + sphereRadius;
 
-    for (int32_t z = 0; z < CHUNK_SIZE; z++){ // iterate over z axis
-        float zValue = sphereRadius * (z + chunks[chunk_id].startPosition.z);
-        for (int32_t x = 0; x < CHUNK_SIZE; x++){ // iterate over x axis
+    for (uint8_t z = 0; z < CHUNK_SIZE; z++){ // iterate over z axis
+        for (uint8_t x = 0; x < CHUNK_SIZE; x++){ // iterate over x axis
             constexpr int8_t neighbs[8][2] = {{-1, 0}, {0, -1}, {0, 1}, {1, 0}, // up, left, right, down
                 {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
 
-            float xValue = sphereRadius * (x + chunks[chunk_id].startPosition.x);
             int16_t discreteY = chunkHeightMap.getHeight(z, x);
-            float yValue = sphereRadius * discreteY;
             
             if ((z+x)%2 == 1){ // od layer
                 // check if 4 neighbour if they have same hight value then you don't need to append this sphere
-                int16_t hightLevel = chunkHeightMap.getHeight(z+neighbs[0][0], x+neighbs[0][1]);
+                int16_t hightLevel = chunkHeightMap.getHeight((int8_t)z+neighbs[0][0], (int8_t)x+neighbs[0][1]);
                 bool sameHight = true;
 
                 for (uint32_t k = 1; k < 4; k++){
-                    if (hightLevel != chunkHeightMap.getHeight(z+neighbs[k][0], x+neighbs[k][1])){
+                    if (hightLevel != chunkHeightMap.getHeight((int8_t)z+neighbs[k][0], (int8_t)x+neighbs[k][1])){
                         sameHight = false;
                         break;
                     }
@@ -62,15 +64,16 @@ void ChunkHolder::generateChunk(uint32_t chunk_id) {
                     continue;
             }
             
-            chunks[chunk_id].spheres.emplace_back(xValue, yValue, zValue, sphereRadius);
-            chunks[chunk_id].boundBox.m_Max.y = glm::max(yValue + sphereRadius, chunks[chunk_id].boundBox.m_Max.y);
-            chunks[chunk_id].boundBox.m_Min.y = glm::min(yValue - sphereRadius, chunks[chunk_id].boundBox.m_Min.y);
+            chunks[chunk_id].spheres.emplace_back(x, discreteY, z);
+            uint32_t lastIndex = chunks[chunk_id].spheres.size()-1;
+            chunks[chunk_id].boundBox.m_Max.y = glm::max((discreteY*sphereRadius) + sphereRadius, chunks[chunk_id].boundBox.m_Max.y);
+            chunks[chunk_id].boundBox.m_Min.y = glm::min((discreteY*sphereRadius) - sphereRadius, chunks[chunk_id].boundBox.m_Min.y);
 
 
             // check 8 neighbour find the highest difference , [z][x]
             int32_t maxDiff = 0;
             for (int16_t k = 0; k < 8; k++){
-                int32_t difference = discreteY - chunkHeightMap.getHeight(z+neighbs[k][0], x+neighbs[k][1]);
+                int32_t difference = discreteY - chunkHeightMap.getHeight((int8_t)z+neighbs[k][0], (int8_t)x+neighbs[k][1]);
                 if (difference > maxDiff)
                     maxDiff = difference;
             }
@@ -78,7 +81,8 @@ void ChunkHolder::generateChunk(uint32_t chunk_id) {
             // if difference bigger than sphereRadius create more spheres to fill the gap
             for (int16_t f = 2; f <= maxDiff; f += 2){
                 int32_t fillY = discreteY - f;
-                chunks[chunk_id].spheres.emplace_back(xValue, fillY*sphereRadius, zValue, sphereRadius);
+                // because the order of the spheres has to be ascending by height we need to insert smallest hight first
+                chunks[chunk_id].spheres.emplace(chunks[chunk_id].spheres.begin()+lastIndex, x, fillY, z);
             }
 
             // check minimum y value again
@@ -88,6 +92,128 @@ void ChunkHolder::generateChunk(uint32_t chunk_id) {
     }    
     // add total number of chunks
     totalNumOfSpheres += chunks[chunk_id].spheres.size();
+}
+
+void ChunkHolder::calcAmbientOcc(uint32_t chunk_id){
+    int32_t chunkPosZ = chunk_id/chunkAmount;
+    int32_t chunkPosX = chunk_id%chunkAmount;
+
+    for (uint32_t i = 0; i < chunks[chunk_id].spheres.size(); i++){
+        int16_t xPos, yPos, zPos;
+        chunks[chunk_id].spheres[i].GetPos(xPos, yPos, zPos);
+
+        uint16_t bitCounter = 1;
+        // counter clockwise neighbours
+        constexpr int8_t neighbs[4][2] = {{1,1}, {-1,1}, {-1,-1}, {1,-1}}; // ++, -+, --, +-
+
+        // check 12 ambient occlusion
+        // XY plane check, Z is same;
+        for (int16_t k = 0; k < 4; k++){
+            int16_t xPosOcc = xPos + neighbs[k][0];
+            int16_t yPosOcc = yPos + neighbs[k][1];
+            int32_t targetChunkX;
+
+            // check if positions are valid
+            if (xPosOcc == -1){
+                targetChunkX = chunkPosX - 1;
+                xPosOcc = CHUNK_SIZE-1;
+            }
+            else if (xPosOcc == CHUNK_SIZE){
+                targetChunkX = chunkPosX + 1;
+                xPosOcc = 0;
+            }
+            else { // position is valid you can use
+                targetChunkX = chunkPosX;
+            }
+
+            if (targetChunkX > -1 && targetChunkX < chunkAmount){
+                uint32_t targetChunkIndex = chunkPosZ*chunkAmount + targetChunkX;
+                uint32_t outId;
+                // if there is a sphere at target occlusion position
+                if (chunks[targetChunkIndex].GetSphere(xPosOcc, yPosOcc, zPos, outId)){
+                    chunks[chunk_id].spheres[i].AmbientOcclusion |= bitCounter;
+                }
+            }
+
+            // increase bit counter
+            bitCounter <<= 1;
+        }
+        // ZY plane check, X is same
+        for (int16_t k = 0; k < 4; k++){
+            int16_t zPosOcc = zPos + neighbs[k][0];
+            int16_t yPosOcc = yPos + neighbs[k][1];
+            int32_t targetChunkZ;
+
+            // check if positions are valid
+            if (zPosOcc == -1){
+                targetChunkZ = chunkPosZ - 1;
+                zPosOcc = CHUNK_SIZE-1;
+            }
+            else if (zPosOcc == CHUNK_SIZE){
+                targetChunkZ = chunkPosZ + 1;
+                zPosOcc = 0;
+            }
+            else { // position is valid you can use
+                targetChunkZ = chunkPosZ;
+            }
+
+            if (targetChunkZ > -1 && targetChunkZ < chunkAmount){
+                uint32_t targetChunkIndex = targetChunkZ*chunkAmount + chunkPosX;
+                uint32_t outId;
+                // if there is a sphere at target occlusion position
+                if (chunks[targetChunkIndex].GetSphere(xPos, yPosOcc, zPosOcc, outId)){
+                    chunks[chunk_id].spheres[i].AmbientOcclusion |= bitCounter;
+                }
+            }
+
+            // increase bit counter
+            bitCounter <<= 1;
+        }
+        // XZ plane check, Y is same
+        for (int16_t k = 0; k < 4; k++){
+            int16_t xPosOcc = xPos + neighbs[k][0];
+            int16_t zPosOcc = zPos + neighbs[k][1];
+            int32_t targetChunkX, targetChunkZ;
+
+            // check if positions are valid
+            if (zPosOcc == -1){
+                targetChunkZ = chunkPosZ - 1;
+                zPosOcc = CHUNK_SIZE-1;
+            }
+            else if (zPosOcc == CHUNK_SIZE){
+                targetChunkZ = chunkPosZ + 1;
+                zPosOcc = 0;
+            }
+            else { // position is valid you can use
+                targetChunkZ = chunkPosZ;
+            }
+
+            // check x position
+            if (xPosOcc == -1){
+                targetChunkX = chunkPosX - 1;
+                xPosOcc = CHUNK_SIZE-1;
+            }
+            else if (xPosOcc == CHUNK_SIZE){
+                targetChunkX = chunkPosX + 1;
+                xPosOcc = 0;
+            }
+            else { // position is valid you can use
+                targetChunkX = chunkPosX;
+            }
+            
+            if (targetChunkZ > -1 && targetChunkZ < chunkAmount && targetChunkX > -1 && targetChunkX < chunkAmount){
+                uint32_t targetChunkIndex = targetChunkZ*chunkAmount + targetChunkX;
+                uint32_t outId;
+                // if there is a sphere at target occlusion position
+                if (chunks[targetChunkIndex].GetSphere(xPosOcc, yPos, zPosOcc, outId)){
+                    chunks[chunk_id].spheres[i].AmbientOcclusion |= bitCounter;
+                }
+            }
+
+            // increase bit counter
+            bitCounter <<= 1;
+        }
+    }
 }
 
 void ChunkHolder::generateHeightMapForChunk(const ChunkPos chunk_pos) {

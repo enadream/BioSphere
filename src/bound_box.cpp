@@ -27,21 +27,12 @@ void BoundBox::Print() {
     printf("Bound Box: X: %f, %f | Y: %f, %f | Z: %f, %f \n", m_Min.x, m_Max.x, m_Min.y, m_Max.y, m_Min.z, m_Max.z);
 }
 
-glm::vec3 BoundBox::GetCenter() {
-    glm::vec3 result;
 
-    result.x = (m_Min.x + m_Max.x) / 2.0f;
-    result.y = (m_Min.y + m_Max.y) / 2.0f;
-    result.z = (m_Min.z + m_Max.z) / 2.0f;
+// glm::vec3 BoundBox::GetSize() {
+//     glm::vec3 result;
+//     result.x = m_Max.x - m_Min.x;
+//     result.y = m_Max.y - m_Min.y;
+//     result.z = m_Max.z - m_Min.z;
 
-    return result;
-}
-
-glm::vec3 BoundBox::GetSize() {
-    glm::vec3 result;
-    result.x = m_Max.x - m_Min.x;
-    result.y = m_Max.y - m_Min.y;
-    result.z = m_Max.z - m_Min.z;
-
-    return result;
-}
+//     return result;
+// }

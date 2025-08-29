@@ -9,6 +9,10 @@ in SphereData {
     vec2 pixelCenter; // pixel center of the sphere
 } v_Sphere;
 
+in VertData {
+    flat uint AmbientOcclusion;
+} v_;
+
 struct DirectLight {
     vec3 direction;
     vec3 ambient;
@@ -33,8 +37,10 @@ uniform samplerCube u_Texture;
 uniform DirectLight u_DirLight;
 
 vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos);
+float GetAmbientOccVal(vec3 normal);
 
 void main() {
+    
     // Calculate the pixel offset from the defined center
     vec2 pixelOffset = gl_FragCoord.xy - v_Sphere.pixelCenter;
     // (pixelOffset / u_FocalLength) * v_Sphere.viewZ;
@@ -56,9 +62,11 @@ void main() {
     vec3 fragNormal = (fragPos - v_Sphere.center) / v_Sphere.radius;
 
     gl_FragDepth = distance(fragPos, u_CamPos) * u_OneOverFarDistance;
-    //vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, -normalize(camToFrag), fragPos);
+    vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, -normalize(camToFrag), fragPos);
+    float occ = GetAmbientOccVal(fragNormal);
 
-    FragColor = vec4(fragNormal, 1.0);
+    // FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    FragColor = vec4(fragColor * occ, 1.0);
 }
 
 
@@ -81,20 +89,60 @@ vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragReal
 
     // ambient light
     vec3 textureColor = vec3(texture(u_Texture, normal));
-    result = light.ambient * textureColor;
+    result = light.ambient * color;
 
     // diffuse light
     weight = max(dot(-light.direction, normal), 0.0);
-    result += weight * light.diffuse * textureColor;
+    result += weight * light.diffuse * color;
     //result += pow(weight * light.diffuse * textureColor, vec3(2.2));
 
-    // specular light phong
+    // // specular light phong
     // vec3 reflectDir = reflect(light.direction, normal);
     // weight = pow(max(dot(reflectDir, viewDir), 0.0), 32.0f);
     // // // specular light blinn phong
     // // vec3 halfWayDir = normalize(-light.direction + viewDir);
     // // weight = pow(max(dot(normal, halfWayDir), 0.0), 16.0f);
-    // result += weight * light.specular * textureColor;
+    // result += weight * light.specular * color;
 
     return result;
+}
+
+float GetAmbientOccVal(vec3 normal){
+    const float shadePow = 1.0;
+
+    const vec3 shadeDirs[12] = vec3[12](
+        // XY plane: angles 45, 135, 225, 315 degrees
+        shadePow * normalize(vec3(1.0, 1.0, 0.0)),
+        shadePow * normalize(vec3(-1.0, 1.0, 0.0)),
+        shadePow * normalize(vec3(-1.0, -1.0, 0.0)),
+        shadePow * normalize(vec3(1.0, -1.0, 0.0)),
+        // ZY plane: angles 45, 135, 225, 315 degrees
+        shadePow * normalize(vec3(0.0, 1.0, 1.0)),
+        shadePow * normalize(vec3(0.0, 1.0, -1.0)),
+        shadePow * normalize(vec3(0.0, -1.0, -1.0)),
+        shadePow * normalize(vec3(0.0, -1.0, 1.0)),
+        // XZ plane: angles 45, 135, 225, 315 degrees
+        shadePow * normalize(vec3(1.0, 0.0, 1.0)),
+        shadePow * normalize(vec3(-1.0, 0.0, 1.0)),
+        shadePow * normalize(vec3(-1.0, 0.0, -1.0)),
+        shadePow * normalize(vec3(1.0, 0.0, -1.0))
+    );
+
+    float totalInfluence = 0.0;
+    const float ambientExponent = 3.0;
+
+    uint bitMask = 1;
+    for (int i = 0; i < 12 ; i++){
+        if ((bitMask & v_.AmbientOcclusion) != 0){
+            float dotInfluence = max(0.0, dot(shadeDirs[i], normal));
+            totalInfluence += pow(dotInfluence, ambientExponent);
+        }
+        bitMask = bitMask << 1;
+    }
+
+    if (totalInfluence > 0.99){
+        totalInfluence = 0.99;
+    }
+
+    return 1.0 - totalInfluence;
 }

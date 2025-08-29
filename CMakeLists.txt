@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.31)
 
 # Project information
-project(BioSphereEvolution VERSION 0.01 LANGUAGES CXX C)
+project(BioSphere VERSION 0.01 LANGUAGES CXX C)
 
 # Definitions
 add_definitions(-DPROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -47,7 +47,7 @@ include_directories(${CMAKE_SOURCE_DIR}/deps/glm-1.0.2)
 # link_directories(${ASSIMP_DIR}/build/lib) libassimp.dll.a
 
 # Libraries glfw libglew32.a libcglm.dll.a
-set(LIBRARIES libglfw3.a OpenGL::GL opengl32)
+set(LIBRARIES libglfw3.a OpenGL::GL)
 
 # Find OpenGL
 find_package(OpenGL REQUIRED)
@@ -56,7 +56,7 @@ find_package(OpenGL REQUIRED)
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # Create main executable
-add_executable(BioSphereEvolution ${SOURCES} ${GLAD_SRC})
+add_executable(BioSphere ${SOURCES} ${GLAD_SRC})
 
 # Link glfw and OpenGL library to the executable
-target_link_libraries(BioSphereEvolution ${LIBRARIES})
+target_link_libraries(BioSphere ${LIBRARIES})

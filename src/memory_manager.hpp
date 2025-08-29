@@ -5,15 +5,11 @@
 #include <vector>
 #include <stdio.h>
 
-struct FreeBlock {
+struct MemBlock { // 8 bytes
     uint32_t begin; // begging index
     uint32_t size;   // size of the free block
 
-    FreeBlock (uint32_t _begin, uint32_t _size) : begin(_begin), size(_size) {}
-
-    bool operator<(const FreeBlock &other) const {
-        return begin < other.begin;
-    }
+    MemBlock (uint32_t _begin, uint32_t _size) : begin(_begin), size(_size) {}
 };
 
 class MemoryManager {
@@ -36,10 +32,10 @@ public: // functions
 
 private: // variables
     uint32_t totalSize;
-    std::vector<FreeBlock> freeBlocks;
+    std::vector<MemBlock> freeBlocks;
 
 private: // functions
-    void MergeFreeBlocks();
+
 };
 
 

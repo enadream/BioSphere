@@ -17,8 +17,26 @@ public: // functions
     bool IsOnFrustum(const Frustum &frustum);
 
     void Print();
-    glm::vec3 GetCenter();
-    glm::vec3 GetSize();
+    inline glm::vec3 GetCenter() const {
+        return (m_Min + m_Max) * 0.5f;
+    }
+    inline glm::vec3 GetSize() const {
+        return glm::abs(m_Max - m_Min);
+    }
+
+    // Get the 8 corners of the AABB
+    inline std::vector<glm::vec4> GetCorners() const {
+        return {
+            {m_Min.x, m_Min.y, m_Min.z, 1.0f},
+            {m_Max.x, m_Min.y, m_Min.z, 1.0f},
+            {m_Min.x, m_Max.y, m_Min.z, 1.0f},
+            {m_Max.x, m_Max.y, m_Min.z, 1.0f},
+            {m_Min.x, m_Min.y, m_Max.z, 1.0f},
+            {m_Max.x, m_Min.y, m_Max.z, 1.0f},
+            {m_Min.x, m_Max.y, m_Max.z, 1.0f},
+            {m_Max.x, m_Max.y, m_Max.z, 1.0f}
+        };
+    }
 
 public: // variables
     glm::vec3 m_Min;

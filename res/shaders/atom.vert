@@ -1,5 +1,17 @@
 #version 460 core
-layout (location = 0) in vec4 aSphere;
+// This matches `glVertexAttribPointer`'s first argument (0) and `vec4` type.
+layout (location = 0) in vec4 aPosition;
+// ChunkTypeAndFlags (Layout Location 1)
+layout (location = 1) in uint aChunkTypeFlags;
+// AmbientOcclusion (Layout Location 2)
+layout (location = 2) in uint aAmbientOcclusion;
+// Note: We use `vec3` because the GL_UNSIGNED_BYTE data from the VBO
+// is normalized to the range [0.0, 1.0] when you pass GL_TRUE to glVertexAttribPointer.
+layout (location = 3) in vec3 aLights[6];
+
+// layout (location = 0) in vec4 aSphere;
+// layout (location = 1) in uvec2 aChunkTypeFlags;
+// layout (location = 2) in uvec4 aLights;
 
 out SphereData {
     vec3 center; // C
@@ -8,6 +20,10 @@ out SphereData {
     float viewZOverFocalLength; // viewZ / focalLength 
     vec2 pixelCenter; // pixel center of the sphere
 } v_Sphere;
+
+out VertData {
+    flat uint AmbientOcclusion;
+} v_;
 
 bool IsSphereVisible(vec3 pos, float radius);
 
@@ -25,8 +41,8 @@ uniform float u_OneOverFarDistance; // (1.0 / Fardistance)
 uniform float u_FocalLength;
 
 void main(){
-    vec3 sphereCenter = aSphere.xyz;
-    float radius = aSphere.w;
+    vec3 sphereCenter = aPosition.xyz;
+    float radius = aPosition.w;
 
     if (!IsSphereVisible(sphereCenter, radius)){
         gl_Position = vec4(-1000,-1000,-1000, 1.0);
@@ -34,6 +50,7 @@ void main(){
         return;
     }
 
+    
     // find the size ellipse size on the screen
     vec3 camToCenter = sphereCenter - u_CamPos;
     float oc = length(camToCenter);
@@ -79,7 +96,7 @@ void main(){
     v_Sphere.centerToCam = -camToCenter;
     v_Sphere.viewZOverFocalLength = zLenght / u_FocalLength;
     v_Sphere.pixelCenter = (ndc.xy*0.5 + 0.5) * u_Resolution;
-
+    v_.AmbientOcclusion = aAmbientOcclusion;
     // set the values
     gl_Position = u_Proj * vec4(viewCenterXY, viewCenter.z, 1.0);;
     gl_PointSize = pointSize;

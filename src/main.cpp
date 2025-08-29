@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <stdio.h>
 #include <string>
 
@@ -15,6 +16,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/noise.hpp>
 
+#include "chunk.hpp"
 #include "debug_func.hpp"
 #include "texture.hpp"
 #include "camera.hpp"
@@ -77,7 +79,7 @@ int main(){
     }
     
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Vsync
+    glfwSwapInterval(0); // Vsync
 
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -110,7 +112,7 @@ int main(){
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    printf("Sizeof cpu sphere %llu\n", sizeof(GPU_Sphere));
+    printf("Sizeof cpu sphere %llu\n", sizeof(CPU_Sphere));
 
     //////////////// CHUNKS HOLDER ////////////////////////////////////////////////////////////////////////////////////////////////
     ChunkHolder chunkHolder(20, sphereRadius); // total amount of chunk is x*x
@@ -126,23 +128,56 @@ int main(){
     computeConfig.PrintSizes();
 
     // buffer memory manager
-    MemoryManager memoryManager(1.2 * chunkHolder.GetTotalNumOfSpheres() * sizeof(Sphere));
+    MemoryManager memoryManager(1.2 * chunkHolder.GetTotalNumOfSpheres() * sizeof(GPU_Sphere));
 
     // load data to the buffer
     VertexArray sphereVAO;
-    sphereVAO.m_VertBuffer.GenVertexBuffer(memoryManager.GetTotalSize(), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_STATIC_DRAW);
-    sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(Sphere), 0);
+    sphereVAO.m_VertBuffer.GenVertexBuffer(memoryManager.GetTotalSize(), nullptr, chunkHolder.GetTotalNumOfSpheres(), GL_DYNAMIC_DRAW);
+    // Position (Location 0 in your shader)
+    sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(GPU_Sphere), offsetof(GPU_Sphere, Position));
+    // ChunkTypeAndFlags (Location 1)
+    sphereVAO.InsertLayoutI(1, 1, GL_UNSIGNED_SHORT, sizeof(GPU_Sphere), offsetof(GPU_Sphere, ChunkTypeAndFlags));
+    // AmbientOcclusion (Location 2)
+    sphereVAO.InsertLayoutI(2, 1, GL_UNSIGNED_SHORT, sizeof(GPU_Sphere), offsetof(GPU_Sphere, AmbientOcclusion));
+    // Lights Array (Locations 3 to 8)
+    // We need a separate attribute for each light in the array.
+    for (int i = 0; i < 6; ++i) {
+        sphereVAO.InsertLayout(3+i, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(GPU_Sphere), offsetof(GPU_Sphere, Lights) + i * sizeof(LightVector));
+
+        // Each light is a 3-component unsigned byte vector.
+        // We use GL_TRUE to normalize the byte values (0-255) to a float range (0.0-1.0),
+        // which is ideal for color calculations in the shader.
+
+        // Each light is a 3-component unsigned byte vector.
+        // We use an offset to the start of the 'Lights' array plus the offset for each element.
+    }
+
+
+    //sphereVAO.InsertLayout(0, 4, GL_FLOAT, GL_FALSE, sizeof(GPU_Sphere), 0);
+    //sphereVAO.InsertLayoutI(1, 2, GL_UNSIGNED_INT, sizeof(GPU_Sphere), 16);
+    //sphereVAO.InsertLayoutI(2, 4, GL_UNSIGNED_INT, sizeof(GPU_Sphere), 24);
+
+    
+    std::vector<GPU_Sphere> spheres;
     
     sphereVAO.Bind();
     for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
         uint32_t offset = 0;
-        uint32_t byte_size = chunkHolder.chunks[i].spheres.size()*sizeof(Sphere);
+        // clear old data
+        spheres.clear();
+        // fill the buffer
+        chunkHolder.chunks[i].GetGPUArray(spheres, chunkHolder.GetSphereRadius());
+        // allocate memory from buffer
+        uint32_t byte_size = spheres.size()*sizeof(GPU_Sphere);
         memoryManager.Allocate(byte_size, offset);
-        // to find the vertex offset, we need to divide the byte offset by the vertex size
-        chunkHolder.chunks[i].bufferVertexOffset = offset / sizeof(Sphere);
-        glBufferSubData(GL_ARRAY_BUFFER, offset, byte_size, chunkHolder.chunks[i].spheres.data());
-    }
+        // fill the vertex info
+        chunkHolder.chunks[i].vertexInfo.start = offset / sizeof(GPU_Sphere);
+        chunkHolder.chunks[i].vertexInfo.count = spheres.size();
 
+        // to find the vertex offset, we need to divide the byte offset by the vertex size
+        glBufferSubData(GL_ARRAY_BUFFER, offset, byte_size, spheres.data());
+    }
+    sphereVAO.Unbind();
 
     // uint32_t sphereOffsetBytes = 0;
     // for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
@@ -240,7 +275,7 @@ int main(){
         lastFrameTime = glfwGetTime();
 
         // print fps
-        if (frameUpate > 0.99999){ // every 0.25 sec update the fps counter
+        if (frameUpate > 0.99999){ // every 1 sec update the fps counter
             title.resize(22);
             title += std::to_string(int(1.0/(frameUpate/frameCount))) + " fps / ";
             title += std::to_string((frameUpate/frameCount)*1000) + "ms";
@@ -284,7 +319,7 @@ int main(){
         drawCommands.clear();
         for (uint32_t i = 0; i < chunkHolder.chunks.size(); i++){
             if (chunkHolder.chunks[i].boundBox.IsOnFrustum(cam.m_Frustum)){
-                drawCommands.emplace_back(chunkHolder.chunks[i].spheres.size(), 1, chunkHolder.chunks[i].bufferVertexOffset, 0);
+                drawCommands.emplace_back(chunkHolder.chunks[i].vertexInfo.count, 1, chunkHolder.chunks[i].vertexInfo.start, 0);
 
                 // DrawArraysIndirectCommand commandBuff;
                 // commandBuff.count = chunkHolder.chunks[i].spheres.size();
