@@ -16,7 +16,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/noise.hpp>
 
-#include "chunk.hpp"
+#include "world/chunk.hpp"
 #include "debug_func.hpp"
 #include "texture.hpp"
 #include "camera.hpp"
@@ -81,6 +81,7 @@ int main(){
     glfwMakeContextCurrent(window);
     glfwSwapInterval(0); // Vsync
 
+    // ????
     glfwGetCursorPos(window, &lastX, &lastY);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     

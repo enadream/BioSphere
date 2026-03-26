@@ -1,0 +1,76 @@
+#version 460 core
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct DrawCommand {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+struct ChunkBoundingBox {
+    vec4 min; // w is padding or used for flags
+    vec4 max;
+};
+
+// INPUT: All Chunk Data (Static, updated only when chunks load/unload)
+layout(std430, binding = 0) readonly buffer ChunkDataBuffer {
+    ChunkBoundingBox chunks[];
+};
+
+// OUTPUT: The commands for the visible chunks
+layout(std430, binding = 1) writeonly buffer DrawCommandBuffer {
+    DrawCommand commands[];
+};
+
+// ATOMIC COUNTER: Keeps track of how many chunks are visible
+layout(binding = 2, offset = 0) uniform atomic_uint u_VisibleChunkCount;
+
+// UNIFORMS: Camera Data
+uniform vec4 u_FrustumPlanes[6]; // Left, Right, Bottom, Top, Near, Far
+
+bool IsVisible(vec3 minPos, vec3 maxPos);
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    
+    // Bounds check to ensure we don't read garbage memory
+    if (idx >= chunks.length()) return;
+
+    ChunkBoundingBox box = chunks[idx];
+
+    if (IsVisible(box.min.xyz, box.max.xyz)) {
+        // Increment the atomic counter to get a unique slot in the output buffer
+        uint cmdIndex = atomicCounterIncrement(u_VisibleChunkCount);
+
+        // Create the command
+        // Note: You need to store the 'vertexCount' and 'firstVertex' inside your ChunkDataBuffer too
+        // or pass a parallel buffer with that info.
+        // For this example, assuming simpler data:
+        
+        DrawCommand cmd;
+        cmd.count = uint(box.min.w); // Hack: Storing vertex count in min.w for example
+        cmd.instanceCount = 1;
+        cmd.first = uint(box.max.w); // Hack: Storing first vertex in max.w
+        cmd.baseInstance = 0;
+
+        commands[cmdIndex] = cmd;
+    }
+}
+
+bool IsVisible(vec3 minPos, vec3 maxPos) {
+    // Check box against all 6 planes
+    for (int i = 0; i < 6; i++) {
+        vec3 p = minPos;
+        // Optimization: Vertex P is the corner of the box most in the direction of the plane normal
+        if (u_FrustumPlanes[i].x >= 0) p.x = maxPos.x;
+        if (u_FrustumPlanes[i].y >= 0) p.y = maxPos.y;
+        if (u_FrustumPlanes[i].z >= 0) p.z = maxPos.z;
+
+        // If p is behind the plane, the box is outside
+        if (dot(vec4(p, 1.0), u_FrustumPlanes[i]) < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}

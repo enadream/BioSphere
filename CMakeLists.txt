@@ -17,6 +17,7 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror=return-type -std=c++20 -O3 -msse4.1 -
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR})
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # GLFW
 set(GLFW_DIR ${CMAKE_SOURCE_DIR}/deps/glfw-3.4)
@@ -57,6 +58,9 @@ file(GLOB_RECURSE SOURCES src/*.cpp)
 
 # Create main executable
 add_executable(BioSphere ${SOURCES} ${GLAD_SRC})
+
+# Tell compiler where to find project headers
+target_include_directories(BioSphere PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 # Link glfw and OpenGL library to the executable
 target_link_libraries(BioSphere ${LIBRARIES})

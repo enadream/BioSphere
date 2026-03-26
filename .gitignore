@@ -2,11 +2,11 @@ build/
 bin/
 deps/
 .vscode/
+.cache/
 *.exe
 *.dll
 res/textures/
 res/old/
 res/models/
 res/docs/
-compile_commands.json
 BioSphere
