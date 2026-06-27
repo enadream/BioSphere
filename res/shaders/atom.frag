@@ -33,8 +33,8 @@ uniform float u_MaxPointSize;  // maxium size of point
 uniform float u_OneOverFarDistance; // (1.0 / Fardistance)
 uniform float u_FocalLength;
 
-uniform samplerCube u_Texture;
 uniform DirectLight u_DirLight;
+uniform float u_WorldScale;
 
 vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos);
 float GetAmbientOccVal(vec3 normal);
@@ -62,47 +62,58 @@ void main() {
     vec3 fragNormal = (fragPos - v_Sphere.center) / v_Sphere.radius;
 
     gl_FragDepth = distance(fragPos, u_CamPos) * u_OneOverFarDistance;
+
     vec3 fragColor = CalcDirectLight(u_DirLight, fragNormal, -normalize(camToFrag), fragPos);
     float occ = GetAmbientOccVal(fragNormal);
 
-    // FragColor = vec4(1.0, 1.0, 1.0, 1.0);
     FragColor = vec4(fragColor * occ, 1.0);
 }
 
+// Deterministic per-sphere hash [0, 1].
+// Uses only XZ (always exact grid multiples regardless of LOD level).
+// Y is excluded: it is an averaged height that can vary slightly with FP rounding
+// across compute dispatches, which would cause visible color changes on LOD rebuild.
+float sphereHash(vec3 center) {
+    vec2 p = round(center.xz * 2.0);
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p.x);
+}
 
-vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos){
-    vec3 result;
-    float weight;
+vec3 CalcDirectLight(DirectLight light, vec3 normal, vec3 viewDir, vec3 fragRealPos) {
+    // Normalize by world scale so colour band thresholds stay at real-world metre values.
+    float h = v_Sphere.center.y / u_WorldScale;
+
+    // Height colour bands matched to the terrain scale (1 world unit = 1 m).
+    vec3 deepOcean    = vec3(0.10, 0.28, 0.55);
+    vec3 shallowOcean = vec3(0.22, 0.55, 0.82);
+    vec3 beach        = vec3(0.76, 0.71, 0.50);
+    vec3 lowland      = vec3(0.24, 0.50, 0.11);
+    vec3 highland     = vec3(0.17, 0.36, 0.08);
+    vec3 mountain     = vec3(0.44, 0.37, 0.28);
+    vec3 highMountain = vec3(0.58, 0.56, 0.54);
+    vec3 snow         = vec3(0.91, 0.93, 0.95);
 
     vec3 color;
+    if      (h < -20.0)  color = deepOcean;
+    else if (h <  -3.0)  color = mix(deepOcean,    shallowOcean, smoothstep( -20.0,   -3.0, h));
+    else if (h <   5.0)  color = mix(shallowOcean, beach,        smoothstep(  -3.0,    5.0, h));
+    // shorter green bands
+    else if (h <  50.0)  color = mix(beach,        lowland,      smoothstep(   5.0,   50.0, h));
+    else if (h < 180.0)  color = mix(lowland,      highland,     smoothstep(  50.0,  180.0, h));
+    else if (h < 400.0)  color = mix(highland,     mountain,     smoothstep( 180.0,  400.0, h));
+    else if (h < 800.0)  color = mix(mountain,     highMountain, smoothstep( 400.0,  800.0, h));
+    else                 color = mix(highMountain, snow,         smoothstep( 800.0, 1400.0, h));
 
-    if (fragRealPos.y < 1.0){
-        color = vec3(0.0, 0.0, 1.0);
-    }
-    else if (fragRealPos.y < 50.0){
-        float val = (fragRealPos.y-1.0) / 50.0; // 1-50 range
-        color = mix(vec3(0.7411764, 0.396078, 0.0), vec3(1.0, 0.729, 0.42), val);
-    } else {
-        float val = (fragRealPos.y-50.0) / 50.0; // 50-100 range
-        color = mix(vec3(1.0, 0.729, 0.42), vec3(1.0, 1.0, 1.0), val); ;
-    }
+    // Per-sphere variation: unique random brightness/tint offset per sphere.
+    float n = sphereHash(v_Sphere.center);
+    color *= 0.88 + n * 0.24; // +-12 % brightness spread
+    color  = clamp(color, 0.0, 1.0);
 
-    // ambient light
-    vec3 textureColor = vec3(texture(u_Texture, normal));
-    result = light.ambient * color;
-
-    // diffuse light
-    weight = max(dot(-light.direction, normal), 0.0);
+    // Ambient + diffuse lighting.
+    vec3 result = light.ambient * color;
+    float weight = max(dot(-light.direction, normal), 0.0);
     result += weight * light.diffuse * color;
-    //result += pow(weight * light.diffuse * textureColor, vec3(2.2));
-
-    // // specular light phong
-    // vec3 reflectDir = reflect(light.direction, normal);
-    // weight = pow(max(dot(reflectDir, viewDir), 0.0), 32.0f);
-    // // // specular light blinn phong
-    // // vec3 halfWayDir = normalize(-light.direction + viewDir);
-    // // weight = pow(max(dot(normal, halfWayDir), 0.0), 16.0f);
-    // result += weight * light.specular * color;
 
     return result;
 }

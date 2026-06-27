@@ -1,81 +1,42 @@
 #pragma once
 
 #include "physics/bound_box.hpp"
+#include "world/sphere.hpp"
+#include "world/config.hpp"
 
 #include <array>
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <glm/glm.hpp>
-
-// Constants
-// Represents the width and breadth of chunk size
-constexpr uint8_t CHUNK_SIZE = 16;
-constexpr float SPHERE_RADIUS = 0.5f;
-
-// --- Data Structures ---
-
-struct LightVector { // RGB value of a light vector
-    uint8_t R, G, B;
-    LightVector() : R(0), G(0), B(0) {}
-    LightVector(uint8_t r, uint8_t g, uint8_t b) : R(r), G(g), B(b) {}
-};
-
-struct SpherePosition {
-    int16_t DiscreteHeight = 0;
-    uint16_t CellIndex = 0;    // CellIndex = z * CHUNK_SIZE + x
-
-    SpherePosition(uint8_t x, int16_t y, uint8_t z) {
-        CellIndex = static_cast<uint16_t>(z * CHUNK_SIZE + x);
-        DiscreteHeight = y;
-    }
-
-    void GetCoordinates(uint8_t& outX, int16_t& outY, uint8_t& outZ) const {
-        outY = DiscreteHeight;
-        outZ = CellIndex / CHUNK_SIZE;
-        outX = CellIndex % CHUNK_SIZE;
-    }
-
-    bool operator == (const SpherePosition& pos) const {
-        return pos.CellIndex == CellIndex && pos.DiscreteHeight == DiscreteHeight;  
-    }
-
-    // Ascending order
-    bool operator < (const SpherePosition& pos) const {
-        if (CellIndex == pos.CellIndex){ // when their local index is same
-            return DiscreteHeight < pos.DiscreteHeight;
-        }
-        else { // only compare local indexes
-            return CellIndex < pos.CellIndex;
-        }
-    }
-};
-
-struct SphereData { // CPU representation
-    uint16_t ChunkTypeAndFlags = 0;
-    uint16_t AmbientOcclusion = 0;
-    std::array<LightVector, 6> Lights;  // 6 direction +- (x,y,z)
-    SpherePosition Position;    // local position data of the sphere
-
-    SphereData(uint8_t x, int16_t y, uint8_t z) : Position(x, y ,z){}
-    
-    void ToString(std::string& outStr) const;
-};
-
-// GPU Layout (std140/std430 compatible if needed)
-struct GPUSphere {
-    glm::vec4 PositionRadius; // xyz = pos, w = radius
-    uint16_t ChunkTypeAndFlags;  // ChunkTypeAndFlags
-    uint16_t AmbientOcclusion;   // AmbientOcclusion
-    std::array<LightVector, 6> Lights; // 6 directional light
-    uint16_t Padding; // Align to 4 bytes
-};
-static_assert(sizeof(GPUSphere) == 40, "GPUSphere size mismatch");
 
 struct ChunkCoordinates {
-    int32_t X, Z;
-    ChunkCoordinates(int32_t x_, int32_t z_) : X(x_), Z(z_) {}
-    bool operator==(const ChunkCoordinates& other) const { return X == other.X && Z == other.Z; }
+    int32_t Z, X;
+
+    ChunkCoordinates() = default;
+    ChunkCoordinates(int32_t x_, int32_t z_) : Z(z_), X(x_) {}
+
+    bool operator == (const ChunkCoordinates& other) const { return X == other.X && Z == other.Z; }
+    
+    // rows are Z columns are X axis
+    bool operator < (const ChunkCoordinates& other){
+        if (Z == other.Z) {
+            return X < other.X;
+        } else {
+            return Z < other.Z;
+        }
+    }
+
+    // returns concatenated 64 bit key Z|X
+    uint64_t GetKey() const noexcept {
+        uint64_t key = static_cast<uint64_t>(static_cast<uint32_t>(Z)) << 32;
+        key |= static_cast<uint64_t>(static_cast<uint32_t>(X));
+        return key;
+    }
+    // sets X and Z from key
+    void SetFromKey(uint64_t key){
+        Z = static_cast<int32_t>(key >> 32);
+        X = static_cast<int32_t>(key & 0xFFFFFFFF);
+    }
 };
 
 struct GPUBufferInfo { // Holds the info about where this chunk located in the gpu buffer
@@ -83,13 +44,34 @@ struct GPUBufferInfo { // Holds the info about where this chunk located in the g
     uint32_t Count = 0;
 };
 
+// All LOD levels for one chunk, stored back-to-back in a single buffer.
+// data layout: [LOD0 spheres][LOD1 spheres][LOD2 spheres][LOD3 spheres]
+struct ChunkLODSet {
+    std::vector<CompactSphere>          data;
+    std::array<uint32_t, LOD_LEVELS>    lodOffsets{};
+    std::array<uint32_t, LOD_LEVELS>    lodCounts{};
+};
+
 // --- Chunk Class ---
 class Chunk {
 public:
     Chunk(int32_t x, int32_t z);
 
+    // 1.Destructor
+    ~Chunk() = default;
+    // 2.Copy Constructor
+    Chunk(const Chunk&) = delete;
+    // 3.Copy Assignment Operator
+    Chunk& operator=(const Chunk&) = delete;
+
+    // 4.Move Constructor
+    Chunk(Chunk&& other);
+    // 5.Move Assignment Operator
+    //Chunk& operator=(Chunk&& other);
+
+
     // Core Data
-    bool AddSphere(const SphereData& sphere);
+    bool AddSphere(const Sphere& sphere);
     bool RemoveSphere(const SpherePosition targetPos);
     
     // Find range of spheres in a specific cell (x, z)
@@ -102,18 +84,39 @@ public:
     void ToString(std::string& outStr) const;
 
     // GPU Generation
-    void GenerateMesh(std::vector<GPUSphere>& outBuffer, float sphereRadius) const;
+    // maxError = 0  -> full detail (preserves AO/Lights).
+    // maxError > 0  -> adaptive quadtree: blocks are merged until height variance <= maxError.
+    //                 Flat areas collapse aggressively; mountains stay fine-grained.
+    // maxError = 0, maxBlockSize = CHUNK_SIZE -> full detail (preserves AO/Lights, includes all layers).
+    // maxError > 0 or maxBlockSize < CHUNK_SIZE -> adaptive quadtree on surface heights only.
+    //   maxBlockSize caps how large a merged block can be, preventing over-sized spheres near the player.
+    void GenerateMesh(std::vector<GPUSphere>& outBuffer, float sphereRadius,
+                      float maxError = 0.0f, uint8_t maxBlockSize = CHUNK_SIZE) const;
+
+    // Calculates bound boxes
+    void CalculateBounds();
+
+    // Builds all LOD_LEVELS compact LOD meshes from current sphere data.
+    // Idempotent. Call after generation/deserialization, before the renderer needs LODs.
+    void GenerateLODs();
 
     // Getters
     const BoundBox& GetBounds() const { return m_Bounds; }
     BoundBox& GetBounds() { return m_Bounds; } // Mutable accessor for updates
-    
+
     uint32_t GetSize() const {return m_Spheres.size();}
     const ChunkCoordinates& GetCoordinates() const { return m_Coordinates; }
-    std::vector<SphereData>& GetSpheres() { return m_Spheres; }
+    std::vector<Sphere>& GetSpheres() { return m_Spheres; }
+    const std::vector<Sphere>& GetSpheres() const { return m_Spheres; }
+    const ChunkLODSet& GetLODs() const { return m_LODs; }
+
+    // Serializer
+    void Serialize(std::vector<uint8_t>& buffer);
+    void Deserialize(const std::vector<uint8_t>& buffer, uint64_t offset);
 
 public:
     GPUBufferInfo GPUInfo; // Public for Renderer access
+    bool IsDirty = false; // indicates that the chunk has updated so it needs to be saved to disk
 
 private:
     // Helper to keep spheres sorted by LocalIndex then Height for binary search
@@ -122,5 +125,6 @@ private:
 private:
     ChunkCoordinates m_Coordinates;
     BoundBox m_Bounds;
-    std::vector<SphereData> m_Spheres;
+    std::vector<Sphere> m_Spheres;
+    ChunkLODSet m_LODs;
 };

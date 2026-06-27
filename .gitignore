@@ -1,6 +1,8 @@
 build/
 bin/
 deps/
+data/
+docs/
 .vscode/
 .cache/
 *.exe

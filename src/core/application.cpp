@@ -35,9 +35,10 @@ void Application::Run(){
         float deltaTime = m_Timer->GetDeltaTime();
 
         if (!m_Minimized){
-            for (auto& layer : m_LayerStack){
+            for (auto& layer : m_LayerStack)
                 layer->OnUpdate(deltaTime);
-            }
+            for (auto& layer : m_LayerStack)
+                layer->OnRender();
         }
 
         m_Window->OnUpdate(); // Swap buffers, poll events

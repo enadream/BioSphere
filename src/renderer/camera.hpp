@@ -60,6 +60,11 @@ public:
     void SetPosition(const glm::vec3& pos) noexcept { m_Position = pos; }
     void SetPosition(float x, float y, float z) noexcept { m_Position = {x, y, z}; }
 
+    float GetYaw()   const noexcept { return m_Yaw; }
+    float GetPitch() const noexcept { return m_Pitch; }
+    // Set yaw and pitch; caller must Update() to refresh vectors and matrices.
+    void  SetOrientation(float yaw, float pitch) noexcept { m_Yaw = yaw; m_Pitch = pitch; }
+
     glm::vec3 GetFront() const noexcept { return m_Front; }
     glm::vec3 GetUp() const noexcept { return m_Up; }
     glm::vec3 GetRight() const noexcept { return m_Right; }

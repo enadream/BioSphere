@@ -44,6 +44,12 @@ void main(){
     vec3 sphereCenter = aPosition.xyz;
     float radius = aPosition.w;
 
+    if (radius <= 0.0) {
+        gl_Position = vec4(-1000.0, -1000.0, -1000.0, 1.0);
+        gl_PointSize = 0.0;
+        return;
+    }
+
     if (!IsSphereVisible(sphereCenter, radius)){
         gl_Position = vec4(-1000,-1000,-1000, 1.0);
         gl_PointSize = 0.0;

@@ -3,6 +3,7 @@
 #include "physics/frustum.hpp"
 #include <glm/glm.hpp>
 
+
 class BoundBox {
 public:
     BoundBox() = default;
@@ -31,3 +32,6 @@ public:
     glm::vec3 m_Min;
     glm::vec3 m_Max;
 };
+
+// bound box needs to be copyable trivially
+static_assert(std::is_trivially_copyable_v<BoundBox>);

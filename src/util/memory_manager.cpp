@@ -11,10 +11,9 @@ bool MemoryManager::Allocate(uint32_t size, uint32_t &out_index) {
     for (uint32_t i = 0; i < freeBlocks.size(); i++){
         if (size < freeBlocks[i].size){
             out_index = freeBlocks[i].begin;
-            // increase beginning index
             freeBlocks[i].begin += size;
-            // decrease size
-            freeBlocks[i].size -= size;
+            freeBlocks[i].size  -= size;
+            return true;
         }
         else if (size == freeBlocks[i].size){ // exact fit
             out_index = freeBlocks[i].begin;

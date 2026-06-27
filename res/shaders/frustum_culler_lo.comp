@@ -1,0 +1,99 @@
+#version 460 core
+layout(local_size_x = 64) in;
+
+const uint LOD_LEVELS = 4u;
+
+// 48 bytes, std430. Matches CPU ChunkInfoLO.
+struct ChunkInfoLO {
+    int   posX;
+    int   posZ;
+    float bbMinY;
+    float bbMaxY;
+    uint  lodOffsets[4];
+    uint  lodCounts[4];
+};
+
+struct DrawArraysIndirectCommand {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout(std430, binding = 0) readonly buffer ChunkInfoLOBuffer {
+    ChunkInfoLO chunks[];
+};
+
+layout(std430, binding = 1) writeonly buffer DrawCmdBuffer {
+    DrawArraysIndirectCommand drawCmds[];
+};
+
+layout(binding = 2, offset = 0) uniform atomic_uint u_VisibleCount;
+
+layout(std430, binding = 3) writeonly buffer VisibleChunkIdxBuffer {
+    uint visibleChunkIdx[];
+};
+
+uniform vec4  u_FrustumPlanes[6];
+uniform uint  u_ChunkCount;
+uniform float u_SphereRadius;
+uniform uint  u_ChunkSize;
+uniform vec2  u_CamChunkXZ;
+uniform uint  u_HqRenderRange;
+uniform float u_RingFactor;
+uniform float u_LodPad;   // max LOD sphere radius in world units (largest block * SPHERE_RADIUS * LOD_OVERSIZE)
+
+bool IsAABBVisible(vec3 minPt, vec3 maxPt) {
+    for (int i = 0; i < 6; i++) {
+        vec3 p = minPt;
+        if (u_FrustumPlanes[i].x >= 0.0) p.x = maxPt.x;
+        if (u_FrustumPlanes[i].y >= 0.0) p.y = maxPt.y;
+        if (u_FrustumPlanes[i].z >= 0.0) p.z = maxPt.z;
+        if (dot(u_FrustumPlanes[i].xyz, p) + u_FrustumPlanes[i].w < 0.0)
+            return false;
+    }
+    return true;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= u_ChunkCount) return;
+
+    ChunkInfoLO ci = chunks[index];
+
+    // Chebyshev distance to camera chunk (matches square load-ring geometry)
+    float dx   = abs(float(ci.posX) - u_CamChunkXZ.x);
+    float dz   = abs(float(ci.posZ) - u_CamChunkXZ.y);
+    float dist = max(dx, dz);
+
+    // HQ pipeline draws everything inside HQ_RENDER_RANGE - skip here.
+    if (dist < float(u_HqRenderRange)) return;
+
+    // Ring boundaries: HQ * factor^i. Innermost ring index 0, outermost LOD_LEVELS-1.
+    float ringStart = float(u_HqRenderRange);
+    uint  lodIdx    = LOD_LEVELS - 1u;
+    for (uint i = 0u; i < LOD_LEVELS - 1u; ++i) {
+        float ringEnd = ringStart * u_RingFactor;
+        if (dist < ringEnd) { lodIdx = i; break; }
+        ringStart = ringEnd;
+    }
+
+    if (ci.lodCounts[lodIdx] == 0u) return;
+
+    float cellWorld = float(u_ChunkSize) * u_SphereRadius;
+    vec3 bbMin = vec3(float(ci.posX)     * cellWorld - u_LodPad,
+                      ci.bbMinY                       - u_LodPad,
+                      float(ci.posZ)     * cellWorld - u_LodPad);
+    vec3 bbMax = vec3(float(ci.posX + 1) * cellWorld + u_LodPad,
+                      ci.bbMaxY                       + u_LodPad,
+                      float(ci.posZ + 1) * cellWorld + u_LodPad);
+
+    if (!IsAABBVisible(bbMin, bbMax)) return;
+
+    uint drawIdx = atomicCounterIncrement(u_VisibleCount);
+    drawCmds[drawIdx].count         = ci.lodCounts[lodIdx];
+    drawCmds[drawIdx].instanceCount = 1u;
+    drawCmds[drawIdx].first         = ci.lodOffsets[lodIdx];
+    drawCmds[drawIdx].baseInstance  = 0u;
+    visibleChunkIdx[drawIdx]        = index;
+}

@@ -15,16 +15,8 @@ namespace fs = std::filesystem;
 class FileSystem {
 public:
     static bool WriteBinary(const std::string& path, const uint8_t* data, size_t size) {
-        // Ensure directory exist
-        fs::path p(path);
-        if (p.has_parent_path()) {
-            std::error_code ec;
-            fs::create_directories(p.parent_path(), ec);
-            if (ec) {
-                LOG_ERROR("[FileSystem] Failed to create directories for: %s (%s)",
-                          path.c_str(), ec.message().c_str());
-                return false;
-            }
+        if (!EnsureParentDirectory(path)) {
+            return false;
         }
 
         std::ofstream out(path, std::ios::binary);
@@ -47,7 +39,10 @@ public:
         // Open directly -- skip exists() check to avoid TOCTOU race
         std::ifstream in(path, std::ios::binary | std::ios::ate);
         if (!in.is_open()) {
-            LOG_WARN("[FileSystem] Failed to open file for reading: %s", path.c_str());
+            // Only warn if the file exists but couldn't be opened (permissions, etc.).
+            // A missing file is normal on first run - don't pollute the log.
+            if (fs::exists(path))
+                LOG_WARN("[FileSystem] Failed to open file for reading: %s", path.c_str());
             return false;
         }
 
@@ -71,5 +66,31 @@ public:
 
     static bool Exists(const std::string& path) {
         return fs::exists(path);
+    }
+
+    static bool EnsureParentDirectory(const std::string& path){
+        try {
+            std::filesystem::path p(path);
+
+            // Get parent directory
+            std::filesystem::path parent = p.parent_path();
+
+            // If no parent (e.g. "file.bin"), nothing to create
+            if (parent.empty()) {
+                return true;
+            }
+
+            // Create directories if they don't exist
+            if (!std::filesystem::exists(parent)) {
+                return std::filesystem::create_directories(parent);
+            }
+
+            return true;
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("[FileSystem] Failed to ensure directory for path: %s (%s)",
+                    path.c_str(), e.what());
+            return false;
+        }
     }
 };

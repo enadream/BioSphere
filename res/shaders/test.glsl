@@ -17,18 +17,18 @@ out vec4 FragColor;
 
 void main()
 {
-    // --- 1. Compute the view–space coordinate for this fragment ---
+    // --- 1. Compute the view-space coordinate for this fragment ---
     // gl_PointCoord is in [0,1] with (0,0) at the bottom-left.
     // (If your coordinate system differs, adjust accordingly.)
     vec2 offsetPixel = (gl_PointCoord - vec2(0.5)); 
     // Multiply by uSquareSize to get an offset in pixels relative to the ellipse center.
-    // Then, convert that pixel offset into view–space distance.
+    // Then, convert that pixel offset into view-space distance.
     // The conversion factor is (vViewZ / focalLength) since an object of 1 pixel at depth vViewZ
     // corresponds to (vViewZ / focalLength) view space units.
     vec2 viewOffset = offsetPixel * uSquareSize * (vViewZ / focalLength);
     
     // In our drawing, the point sprite is centered at vsphereCenter (in view space).
-    // So, the candidate fragment’s view–space position on the image plane is:
+    // So, the candidate fragment's view-space position on the image plane is:
     vec3 fragPosView = vec3(vsphereCenter.xy + viewOffset, vViewZ);
     
     // --- 2. Construct the ray from the camera (at view-space origin) through the fragment ---
@@ -75,7 +75,7 @@ void main()
 
 // Inputs from the vertex shader:
 in vec2 ellipseSemi;   // (a, b): ellipse semi-axes (in pixels) major minor
-in float ellipseRot;   // ellipse rotation angle θ
+in float ellipseRot;   // ellipse rotation angle theta
 in float uSquareSize;  // size of the bounding square (in pixels)
 
 out vec4 FragColor;
@@ -89,7 +89,7 @@ void main(){
     // Convert to pixel coordinates relative to the square:
     vec2 pos = uv * uSquareSize;
     
-    // --- 1. Rotate the coordinate by -θ to align with the ellipse’s local axes ---
+    // --- 1. Rotate the coordinate by -theta to align with the ellipse's local axes ---
     float cosTheta = cos(-ellipseRot);
     float sinTheta = sin(-ellipseRot);
     vec2 rotPos;
@@ -100,8 +100,8 @@ void main(){
     // --- 2. Evaluate the ellipse equation ---
     // ellipseSemi.x is semi-major axis
     // ellipseSemi.y is semi-minor axis
-    // In the ellipse’s local coordinates the equation is:
-    //    (x/a)² + (y/b)² <= 1
+    // In the ellipse's local coordinates the equation is:
+    //    (x/a)^2 + (y/b)^2 <= 1
     float ellipseVal = (rotPos.x / ellipseSemi.x) * (rotPos.x / ellipseSemi.x)
                      + (rotPos.y / ellipseSemi.y) * (rotPos.y / ellipseSemi.y);
     
@@ -131,7 +131,7 @@ uniform vec4 u_frustumPlanes[6];
 
 // Outputs to fragment shader:
 out vec2 ellipseSemi;   // ellipse semi-axes (a, b) in screen space major:a , minor:b
-out float ellipseRot;   // rotation angle (θ) of the ellipse (in screen space)
+out float ellipseRot;   // rotation angle (theta) of the ellipse (in screen space)
 out float uSquareSize;  // size (in pixels) of the bounding square
 out vec3 vsphereCenter; // sphere center in view space (from: viewMatrix * vec4(coneCenter,1))
 out vec3 worldCenter;   // world center of the sphere
@@ -152,12 +152,12 @@ void main(){
     //float dist = length(axis);
     //float tanalpha = aSpherePos.w / sqrt(dist*dist - aSpherePos.w*aSpherePos.w);
     // --- 1. Compute cone parameters ---
-    // The cone’s axis goes from the camera to coneCenter.
+    // The cone's axis goes from the camera to coneCenter.
     //float L = length(axis);
     //vec3 coneDir = normalize(axis);
     
     // The radius R (in world units) of the circular cross-section
-    // in the plane perpendicular to the cone’s axis:
+    // in the plane perpendicular to the cone's axis:
     float radius = aSpherePos.w;
     sphereR = radius;
     // --- 2. Transform coneCenter to view space ---
@@ -174,7 +174,7 @@ void main(){
     ellipseRot = atan(viewConeDir.y, viewConeDir.x);
     
     // --- 4. Compute projected semi-axes ---
-    // The angle Φ between the cone’s axis and the view direction (0,0,-1):
+    // The angle fi between the cone's axis and the view direction (0,0,-1):
     float cosPhi = -viewConeDir.z; //dot(viewConeDir, vec3(0.0, 0.0, -1.0));
     if (cosPhi < 0.001){
         gl_Position = vec4(-1000,-1000,-1000, 1.0);
@@ -242,20 +242,20 @@ uniform float u_FarDistance; // cameras far dist
 uniform vec3 cameraPos;
 
 void main(){
-    // --- 1. Compute the view–space coordinate for this fragment ---
+    // --- 1. Compute the view-space coordinate for this fragment ---
     // gl_PointCoord is in [0,1] with (0,0) at the bottom-left.
     // (If your coordinate system differs, adjust accordingly.)
     vec2 offsetPixel = gl_PointCoord - vec2(0.5);
     offsetPixel.y *= -1.0; // swap the y is negative at upper part. 
 
     // Multiply by uSquareSize to get an offset in pixels relative to the ellipse center.
-    // Then, convert that pixel offset into view–space distance.
+    // Then, convert that pixel offset into view-space distance.
     // The conversion factor is (vViewZ / focalLength) since an object of 1 pixel at depth vViewZ
     // corresponds to (vViewZ / focalLength) view space units.
     vec2 viewOffset = offsetPixel * uSquareSize * (vViewZ / focalLength);
     
     // In our drawing, the point sprite is centered at vsphereCenter (in view space).
-    // So, the candidate fragment’s view–space position on the image plane is:
+    // So, the candidate fragment's view-space position on the image plane is:
     vec3 fragPosView = vec3(vsphereCenter.xy + viewOffset, vViewZ);
     
     // --- 2. Construct the ray from the camera (at view-space origin) through the fragment ---
@@ -451,11 +451,11 @@ void main(){
     if (length(screenDir) > 0.0) {
         ellipseAngle = atan(screenDir.y, screenDir.x);
     }
-    // --- Calculate the Axis–Aligned Bounding Box ---
+    // --- Calculate the Axis-Aligned Bounding Box ---
     // For an ellipse with semi-axes a (semiMajor) and b (semiMinor) rotated by ellipseAngle,
-    // the axis–aligned bounding box dimensions are given by:
-    //   width  = 2 * sqrt( a²*cos²(theta) + b²*sin²(theta) )
-    //   height = 2 * sqrt( a²*sin²(theta) + b²*cos²(theta) )
+    // the axis-aligned bounding box dimensions are given by:
+    //   width  = 2 * sqrt( a^2*cos^2(theta) + b^2*sin^2(theta) )
+    //   height = 2 * sqrt( a^2*sin^2(theta) + b^2*cos^2(theta) )
     float bboxWidth = 2.0 * sqrt( (a * a) * (cos(ellipseAngle) * cos(ellipseAngle)) +
                                   (b * b) * (sin(ellipseAngle) * sin(ellipseAngle)) );
     float bboxHeight = 2.0 * sqrt( (a * a) * (sin(ellipseAngle) * sin(ellipseAngle)) +

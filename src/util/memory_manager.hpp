@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 struct MemBlock { // 8 bytes
-    uint32_t begin; // begging index
+    uint32_t begin;  // begging index
     uint32_t size;   // size of the free block
 
     MemBlock (uint32_t _begin, uint32_t _size) : begin(_begin), size(_size) {}

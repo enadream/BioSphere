@@ -69,7 +69,7 @@ Window::Window(int32_t width, int32_t height, const std::string title)
     m_VideoMode = glfwGetVideoMode(m_Monitor);
 
     // Initial viewport
-    SetVSync(true);
+    SetVSync(false);
 
     LOG_INFO("Window created successfully.");
 }

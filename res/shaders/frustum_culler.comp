@@ -1,105 +1,75 @@
 #version 460 core
-// Define a work group size. Adjust the local size as needed.
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-struct ChunkInfo { // 16 + 12 + 12 = 40 bytes
-    uint offset;
-    uint size;
-    ivec2 pos;
+struct ChunkInfo {
+    uint  offset;   // first sphere index in the sphere VBO
+    uint  size;     // number of spheres in the chunk
+    int   posX;     // chunk-grid X coordinate
+    int   posZ;     // chunk-grid Z coordinate
     float bbMinX, bbMinY, bbMinZ;
     float bbMaxX, bbMaxY, bbMaxZ;
-};
-struct Sphere { // 16 bytes
-    ivec3 pos;
-    float radius;
-};
+}; // 40 bytes, matches CPU ChunkInfo
 
-// Binding 0: the input chunk data.
+struct DrawArraysIndirectCommand {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+}; // 16 bytes
+
+// Binding 0: all loaded chunks
 layout(std430, binding = 0) readonly buffer ChunkBuffer {
     ChunkInfo chunks[];
 };
-// Binding 1: input packed sphere positions
-layout(std430, binding = 1) readonly buffer SpherePositionBuffer {
-    uint packedSpheres[];
-};
-// Binding 2: output visible sphere buffer
-layout(std430, binding = 2) buffer VisibleSphereBuffer {
-    Sphere visibleSpheres[];
-};
-// Binding 3: an atomic count to count visible chunks.
-layout(binding = 3, offset = 0) uniform atomic_uint visibleSphereCount;
 
-// Frustum planes: 6 planes, each defined as a vec4 (plane normal xyz, and distance w).
-layout (location = 0) uniform vec4 u_frustumPlanes[6];
+// Binding 1: output draw commands (one per visible chunk)
+layout(std430, binding = 1) writeonly buffer DrawCommandBuffer {
+    DrawArraysIndirectCommand drawCmds[];
+};
 
-// A function to test if an AABB is at least partially inside the frustum.
+// Binding 2: atomic counter - counts visible chunks; reused as GL_PARAMETER_BUFFER for draw
+layout(binding = 2, offset = 0) uniform atomic_uint u_VisibleCount;
+
+layout(location = 0) uniform vec4 u_FrustumPlanes[6];
+layout(location = 6) uniform uint u_ChunkCount;
+
+// HQ pipeline pre-loads chunks beyond the visible range so movement does not stall.
+// Only chunks inside u_HqRenderRange are actually drawn.
+uniform vec2 u_CamChunkXZ;
+uniform uint u_HqRenderRange;
+
 bool IsAABBVisible(vec3 minPt, vec3 maxPt);
 
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    // Guard against reading beyond our array.
-    if (index < chunks.length()){
-        ChunkInfo chunk = chunks[index];
-        // Perform frustum culling on the chunk's bounding box.
-        vec3 bbmin = vec3(chunk.bbMinX, chunk.bbMinY, chunk.bbMinZ);
-        vec3 bbmax = vec3(chunk.bbMaxX, chunk.bbMaxY, chunk.bbMaxZ);
+    if (index >= u_ChunkCount) return;
 
-        if (IsAABBVisible(bbmin, bbmax)) { // IsAABBVisible(bbmin, bbmax)
-            // Atomically get an index into the visibleIndices array.
-            uint drawIndex = atomicCounterAdd(visibleSphereCount, chunk.size);
+    ChunkInfo chunk = chunks[index];
 
-            for (uint i = 0; i < chunk.size; i++){
-                uint visibleID = drawIndex + i;
-                // get the packed position yVal(32-16) + zOffset(16-8) + xOffset(8-0)
-                uint packedPos = packedSpheres[chunk.offset + i];
+    float dx   = abs(float(chunk.posX) - u_CamChunkXZ.x);
+    float dz   = abs(float(chunk.posZ) - u_CamChunkXZ.y);
+    if (max(dx, dz) > float(u_HqRenderRange)) return;
 
-                // set x y and z
-                visibleSpheres[visibleID].pos.x = chunk.pos.x + int(packedPos & 0xFF);
-                // chunk pos consists of 2 variable x and z but z is called y cuz of ivec2 standart
-                visibleSpheres[visibleID].pos.z = chunk.pos.y + int((packedPos >> 8) & 0xFF);
-                // parsing y value
-                uint yValRaw = (packedPos >> 16) & 0xFFFF;
-                //Convert to a signed 16-bit integer:
-                int yVal = 0;
-                if ((yValRaw & 0x8000) != 0) {
-                    // Negative value: Sign-extend to 32 bits
-                    yVal = int(yValRaw | 0xFFFF0000);
-                } else {
-                    // Positive value
-                    yVal = int(yValRaw);
-                }
-                visibleSpheres[visibleID].pos.y = yVal;
+    vec3 bbMin = vec3(chunk.bbMinX, chunk.bbMinY, chunk.bbMinZ);
+    vec3 bbMax = vec3(chunk.bbMaxX, chunk.bbMaxY, chunk.bbMaxZ);
 
-                visibleSpheres[visibleID].radius = 0.5;
-            }
-        }
+    if (IsAABBVisible(bbMin, bbMax)) {
+        uint drawIndex = atomicCounterIncrement(u_VisibleCount);
+        drawCmds[drawIndex].count        = chunk.size;
+        drawCmds[drawIndex].instanceCount = 1u;
+        drawCmds[drawIndex].first        = chunk.offset;
+        drawCmds[drawIndex].baseInstance = 0u;
     }
 }
 
-bool IsAABBVisible(vec3 minPt, vec3 maxPt){
-    for (int i = 0; i < 6; i++){
-        // For each plane, compute the "positive vertex" from the AABB.
+bool IsAABBVisible(vec3 minPt, vec3 maxPt) {
+    for (int i = 0; i < 6; i++) {
         vec3 p = minPt;
-        if (u_frustumPlanes[i].x >= 0.0) p.x = maxPt.x;
-        if (u_frustumPlanes[i].y >= 0.0) p.y = maxPt.y;
-        if (u_frustumPlanes[i].z >= 0.0) p.z = maxPt.z;
-        // If this vertex is outside the plane, the entire AABB is outside.
-        if (dot(vec3(u_frustumPlanes[i].xyz), p) + u_frustumPlanes[i].w < 0.0)
+        if (u_FrustumPlanes[i].x >= 0.0) p.x = maxPt.x;
+        if (u_FrustumPlanes[i].y >= 0.0) p.y = maxPt.y;
+        if (u_FrustumPlanes[i].z >= 0.0) p.z = maxPt.z;
+        if (dot(u_FrustumPlanes[i].xyz, p) + u_FrustumPlanes[i].w < 0.0)
             return false;
     }
-    return true; // If not rejected by any plane, the AABB is inside
-}
-
-bool IsSphereVisible(vec4 sphere_data){
-    for (int i = 0; i < 6; i++){
-        // Calculate signed distance from sphere center to the plane
-        float dist = dot(sphere_data.xyz, u_frustumPlanes[i].xyz) + u_frustumPlanes[i].w;
-
-        // If the sphere is entirely behind the plane, it's not visible
-        if (dist < -sphere_data.w) {
-            return false;
-        }
-    }
-
     return true;
 }
