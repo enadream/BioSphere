@@ -8,7 +8,7 @@ While BioSphere is not a fully playable game, it successfully renders a dynamic 
 
 To see a demonstration of BioSphere in action, click the image below:
 
-[![Watch the video](https://i3.ytimg.com/vi/q9NTqszRE6A/maxresdefault.jpg)](https://youtu.be/q9NTqszRE6A)
+[![Watch the video](https://i3.ytimg.com/vi/wRFSCrAWEN4/maxresdefault.jpg)](https://youtu.be/wRFSCrAWEN4)
 
 
 
